@@ -44,6 +44,7 @@ add_executable(CommonLibs
     ${CMAKE_CURRENT_BINARY_DIR}/version.cpp
 	EventLoop/EventLoop.cpp
 	EventLoop/EventLoop.h
+	Common/StreamSocket.h
 	Example.h
     main.cpp)
 add_dependencies(CommonLibs versionFileTouchForRebuild) # We want precise time of build in version

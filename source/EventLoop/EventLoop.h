@@ -6,8 +6,11 @@
 #include <vector>
 
 #include <sys/epoll.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 #include <spdlog/spdlog.h>
+#include <spdlog/fmt/bin_to_hex.h>
 
 #include "Common/NonCopyable.h"
 
@@ -26,8 +29,8 @@ public:
 class IFiledescriptorCallbackHandler
 {
 public:
-	virtual void OnFiledescriptorRead() = 0;
-	virtual void OnFiledescriptorWrite() = 0;
+	virtual void OnFiledescriptorRead(int fd) = 0;
+	virtual void OnFiledescriptorWrite(int fd) = 0;
 	virtual ~IFiledescriptorCallbackHandler() {}
 };
 
@@ -96,7 +99,9 @@ public:
 	};
 
 	void RegisterCallbackHandler(IEventLoopCallbackHandler* callback, LatencyType latency);
-	void RegisterFiledescriptor(int fd, uint32_t events);
+	void RegisterFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler);
+	void ModifyFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler);
+	void UnregisterFiledescriptor(int fd);
 
 	void EnableStatistics();
 
@@ -114,7 +119,9 @@ private:
 	std::unordered_map<IEventLoopCallbackHandler*, LatencyType> mCallbacks;
 
 	int mEpollFd = 0;
+	int mEpollReturn = 0;
 	struct epoll_event mEpollEvents[MaxEpollEvents];
+	std::unordered_map<int, IFiledescriptorCallbackHandler*> mFdHandlers;
 	// void CleanupTimers();
 	// Single timer class with enum state dictating if timer is repeating or not
 };

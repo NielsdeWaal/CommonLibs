@@ -4,3 +4,5 @@
 -	Timer structure -> Every cycle of the loop we need to check if a timer has expired {DONE}
 -	Cycle stats -> See how many cycles have been ran every second {DONE}
 -	Have option for choosing between normal timer and linux timerfd -> this would mean that users would have a choice between "run-hot" and waiting for timerfd
+-	Have callback scheduled for next cycle -> give options for function to be executed on the next cycle
+	-	OnFdWrite() for scheduling write on socket for next cycle
