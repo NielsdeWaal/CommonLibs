@@ -22,6 +22,8 @@ public:
 		, mSocket(mEv, this)
 		, mServer(mEv, this)
 	{
+		auto eventloopLogger = spdlog::stdout_color_mt("ExampleApp");
+		mLogger = spdlog::get("ExampleApp");
 		//mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
 	}
 
@@ -30,33 +32,33 @@ public:
 	void Initialise()
 	{
 		//mEv.AddTimer(&mTimer);
+		mServer.BindAndListen(1337);
 		mSocket.Connect("127.0.0.1", 1337);
-		mServer.BindAndListen(1338);
 	}
 
 	void OnTimerCallback()
 	{
-		spdlog::info("Got callback from timer");
+		mLogger->info("Got callback from timer");
 	}
 
 	void OnEventLoopCallback() final
 	{
-		spdlog::info("Got callback from EV");
+		mLogger->info("Got callback from EV");
 	}
 
 	void OnConnected() final
 	{
-		spdlog::info("Connection succeeded");
+		mLogger->info("Connection succeeded");
 	}
 
 	void OnDisconnect() final
 	{
-		spdlog::warn("Connection terminated");
+		mLogger->warn("Connection terminated");
 	}
 
 	void OnIncomingData(Common::StreamSocket* conn, char* data, size_t len) final
 	{
-		spdlog::info("Incoming: {}", std::string{data});
+		mLogger->info("Incoming: {}", std::string{data});
 		conn->Send(data, len);
 	}
 
@@ -74,6 +76,8 @@ private:
 
 	int mFd = 0;
 	char mSockBuf[100];
+
+	std::shared_ptr<spdlog::logger> mLogger;
 
 };
 

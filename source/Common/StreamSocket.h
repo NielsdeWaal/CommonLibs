@@ -30,25 +30,10 @@ public:
 		: mEventLoop(ev)
 		, mHandler(handler)
 	{
+		auto streamSocketLogger = spdlog::stdout_color_mt("StreamSocket");
+		mLogger = spdlog::get("StreamSocket");
+
 		mFd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-		//mFd = socket(AF_INET, SOCK_STREAM, 0);
-		//if(mFd == -1)
-		//{
-		//	spdlog::critical("Socket error");
-		//	throw std::runtime_error("Socket error");
-		//}
-
-		//int flags = ::fcntl(mFd, F_GETFL, 0);
-		//if (flags < 0)
-		//{
-		//	throw std::runtime_error("fcntl(F_GETFL) failed.");
-		//}
-
-		//int res = ::fcntl(mFd, F_SETFL, flags|O_NONBLOCK);
-		//if (res == -1)
-		//{
-		//	throw std::runtime_error("fcntl(F_SETFL, flags|O_NONBLOCK) failed.");
-		//}
 	}
 
 	StreamSocket(EventLoop::EventLoop& ev, int fd, IStreamSocketHandler* handler)
@@ -86,14 +71,14 @@ public:
 
 		if((ret == -1) && (errno == EINPROGRESS))
 		{
-			//spdlog::critical("Connect failed, code:{}", ret);
+			//mLogger->critical("Connect failed, code:{}", ret);
 			//throw std::runtime_error("Connect failed");
 			mEventLoop.RegisterFiledescriptor(mFd, EPOLLIN | EPOLLOUT, this);
 		}
 		else
 		{
 			mEventLoop.RegisterFiledescriptor(mFd, EPOLLIN, this);
-			spdlog::info("fd:{} connected instantly", mFd);
+			mLogger->info("fd:{} connected instantly", mFd);
 		}
 	}
 
@@ -106,7 +91,20 @@ public:
 		}
 		else
 		{
-			spdlog::warn("Attempted send on fd:{}, while not connected", mFd);
+			mLogger->warn("Attempted send on fd:{}, while not connected", mFd);
+		}
+	}
+
+	void Shutdown() noexcept
+	{
+		if(mConnected)
+		{
+			mEventLoop.UnregisterFiledescriptor(mFd);
+			mConnected = false;
+		}
+		if(mFd)
+		{
+			::close(mFd);
 		}
 	}
 
@@ -130,6 +128,7 @@ private:
 				{
 					mEventLoop.ModifyFiledescriptor(fd, EPOLLIN | EPOLLRDHUP, this);
 					mConnected = true;
+					mLogger->info("Connection establisched on fd:{}", fd);
 					mHandler->OnConnected();
 				}
 				else
@@ -146,7 +145,7 @@ private:
 		}
 		else //TODO Make check for connection after sending data i.e check for ack
 		{
-			//spdlog::info("Connection has shutdown, closing socket");
+			//mLogger->info("Connection has shutdown, closing socket");
 			//::close(mFd);
 			//mEventLoop.UnregisterFiledescriptor(mFd);
 			//mConnected = false;
@@ -160,7 +159,7 @@ private:
 
 		if(len == 0)
 		{
-			spdlog::info("Socket has been disconnected, closing filedescriptor. fd:{}", fd);
+			mLogger->info("Socket has been disconnected, closing filedescriptor. fd:{}", fd);
 			mEventLoop.UnregisterFiledescriptor(mFd);
 			mHandler->OnDisconnect();
 			mConnected = false;
@@ -183,6 +182,7 @@ private:
 	bool mConnected = false;
 	bool mSendInProgress = false;
 
+	std::shared_ptr<spdlog::logger> mLogger;
 };
 
 class IStreamSocketServerHandler
@@ -199,11 +199,14 @@ public:
 		: mEventLoop(ev)
 		, mHandler(handler)
 	{
+		auto streamSocketServer = spdlog::stdout_color_mt("StreamSocketServer");
+		mLogger = spdlog::get("StreamSocketServer");
+
 		mFd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 
 		int reuseaddrOption = 1;
 		if (::setsockopt(mFd, SOL_SOCKET, SO_REUSEADDR, &reuseaddrOption, sizeof(reuseaddrOption)) == -1 ) {
-			spdlog::error("Unable to set options on server socket");
+			mLogger->error("Unable to set options on server socket");
 			throw std::runtime_error("Unable to set options on server socket");
 		}
 	}
@@ -217,19 +220,19 @@ public:
 		addr.sin_addr.s_addr = INADDR_ANY;
 
 		if(::bind(mFd, reinterpret_cast<struct sockaddr *>(&addr), sizeof(sockaddr_in)) == -1) {
-			spdlog::critical("Unable to bind address to socket");
+			mLogger->critical("Unable to bind address to socket");
 			throw std::runtime_error("Unable to bind address to socket");
 		}
 
 		if(::listen(mFd, 8) == -1)
 		{
-			spdlog::critical("Unable to open socket for listening");
+			mLogger->critical("Unable to open socket for listening");
 			throw std::runtime_error("Unable to open socket for listening");
 		}
 
 		mEventLoop.RegisterFiledescriptor(mFd, EPOLLIN, this);
 
-		spdlog::info("Started TCP server fd:{}, port:{}", mFd, port);
+		mLogger->info("Started TCP server fd:{}, port:{}", mFd, port);
 	}
 
 private:
@@ -242,11 +245,11 @@ private:
 		{
 			if ((errno == EAGAIN) || (errno == EWOULDBLOCK))
 			{
-				spdlog::warn("Incoming connection already closed");
+				mLogger->warn("Incoming connection already closed");
 			}
 			else
 			{
-				spdlog::critical("Unhandled error on incoming connection, fd:{}, errno:{}", fd, errno);
+				mLogger->critical("Unhandled error on incoming connection, fd:{}, errno:{}", fd, errno);
 				throw std::runtime_error("Unhandled error on incoming connection");
 			}
 		}
@@ -260,7 +263,7 @@ private:
 			}
 			else
 			{
-				spdlog::info("Incoming connection rejected by user, closing socket");
+				mLogger->info("Incoming connection rejected by user, closing socket");
 				close(ret);
 			}
 		}
@@ -277,6 +280,7 @@ private:
 	//std::vector<StreamSocket> mConnections;
 	std::vector<std::unique_ptr<StreamSocket>> mConnections; //TODO This is dumb, user can not access the actual connection
 
+	std::shared_ptr<spdlog::logger> mLogger;
 };
 
 }

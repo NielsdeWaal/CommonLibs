@@ -11,6 +11,7 @@
 
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/bin_to_hex.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 
 #include "Common/NonCopyable.h"
 
@@ -69,17 +70,17 @@ public:
 
 		Timer() = default;
 
-		bool CheckTimerExpired()
+		bool CheckTimerExpired() const noexcept
 		{
 			return (static_cast<TimePoint>(Clock::now()) > mEnd) ? true : false;
 		}
 
-		void UpdateDeadline()
+		void UpdateDeadline() noexcept
 		{
 			mEnd = static_cast<TimePoint>(Clock::now()) + mDuration;
 		}
 
-		bool operator==(const Timer& rhs)
+		bool operator==(const Timer& rhs) const noexcept
 		{
 			return mEnd == rhs.mEnd;
 		}
@@ -103,10 +104,10 @@ public:
 	void ModifyFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler);
 	void UnregisterFiledescriptor(int fd);
 
-	void EnableStatistics();
+	void EnableStatistics() noexcept;
 
 private:
-	void PrintStatistics();
+	void PrintStatistics() noexcept;
 
 	static constexpr int MaxEpollEvents = 64;
 
@@ -124,6 +125,8 @@ private:
 	std::unordered_map<int, IFiledescriptorCallbackHandler*> mFdHandlers;
 	// void CleanupTimers();
 	// Single timer class with enum state dictating if timer is repeating or not
+
+	std::shared_ptr<spdlog::logger> mLogger;
 };
 
 }
