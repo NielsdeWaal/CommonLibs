@@ -51,7 +51,7 @@ public:
 
 	void OnDisconnect() final
 	{
-		spdlog::info("Connection terminated");
+		spdlog::warn("Connection terminated");
 	}
 
 	void OnIncomingData(Common::StreamSocket* conn, char* data, size_t len) final

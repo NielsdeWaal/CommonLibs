@@ -36,11 +36,11 @@ void EventLoop::Run()
 			for(int event = 0; event < mEpollReturn; ++event)
 			{
 				if (mEpollEvents[event].events & EPOLLERR ||
-					mEpollEvents[event].events & EPOLLHUP ||
+					mEpollEvents[event].events & EPOLLHUP) /*||
 					!(mEpollEvents[event].events & EPOLLIN) ||
-					!(mEpollEvents[event].events & EPOLLOUT)) // error
+					!(mEpollEvents[event].events & EPOLLOUT))*/ // error
 				{
-					spdlog::critical("epoll event error, fd:{}, errno:{}", mEpollEvents[event].data.fd, errno);
+					spdlog::critical("epoll event error, fd:{}, event:{}, errno:{}", mEpollEvents[event].data.fd, mEpollEvents[event].events, errno);
 					close(mEpollEvents[event].data.fd);
 				}
 				else if(mEpollEvents[event].events & EPOLLIN)

@@ -128,7 +128,7 @@ private:
 			{
 				if (err == 0)
 				{
-					mEventLoop.ModifyFiledescriptor(fd, EPOLLIN, this);
+					mEventLoop.ModifyFiledescriptor(fd, EPOLLIN | EPOLLRDHUP, this);
 					mConnected = true;
 					mHandler->OnConnected();
 				}
@@ -157,6 +157,15 @@ private:
 	{
 		std::array<char, 512> readBuf = {0};
 		const auto len = ::recv(fd, readBuf.data(), sizeof(readBuf), MSG_DONTWAIT);
+
+		if(len == 0)
+		{
+			spdlog::info("Socket has been disconnected, closing filedescriptor. fd:{}", fd);
+			mEventLoop.UnregisterFiledescriptor(mFd);
+			mHandler->OnDisconnect();
+			mConnected = false;
+			return;
+		}
 
 		mHandler->OnIncomingData(this, readBuf.data(), len);
 	}
@@ -194,7 +203,7 @@ public:
 
 		int reuseaddrOption = 1;
 		if (::setsockopt(mFd, SOL_SOCKET, SO_REUSEADDR, &reuseaddrOption, sizeof(reuseaddrOption)) == -1 ) {
-			spdlog::critical("Unable to set options on server socket");
+			spdlog::error("Unable to set options on server socket");
 			throw std::runtime_error("Unable to set options on server socket");
 		}
 	}
