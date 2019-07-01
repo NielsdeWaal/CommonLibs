@@ -1,8 +1,12 @@
 #TODO
--	Signal watcher -> When for example the application needs closing, we want to look for SIGINT
--	FD Watcher with callback to handler class -> OnFDRead and OnFDWrite
--	Timer structure -> Every cycle of the loop we need to check if a timer has expired {DONE}
--	Cycle stats -> See how many cycles have been ran every second {DONE}
+-	{DONE} Signal watcher -> When for example the application needs closing, we want to look for SIGINT
+-	{DONE} FD Watcher with callback to handler class -> OnFDRead and OnFDWrite
+-	{DONE} Timer structure -> Every cycle of the loop we need to check if a timer has expired
+-	{DONE} Cycle stats -> See how many cycles have been ran every second
 -	Have option for choosing between normal timer and linux timerfd -> this would mean that users would have a choice between "run-hot" and waiting for timerfd
 -	Have callback scheduled for next cycle -> give options for function to be executed on the next cycle
 	-	OnFdWrite() for scheduling write on socket for next cycle
+-	Stats output should include timer for measuring in between prints
+	-	https://github.com/fmtlib/fmt/releases/tag/5.3.0
+-	Threadpool
+	-	Jobs get announced to the eventloop, upon each cycle jobs get distributed to the pool

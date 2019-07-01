@@ -9,20 +9,22 @@ EventLoop::EventLoop()
 	auto eventloopLogger = spdlog::stdout_color_mt("EventLoop");
 	mLogger = spdlog::get("EventLoop");
 
-	mEpollFd = epoll_create1(0);
+	mEpollFd = ::epoll_create1(0);
 	if(mEpollFd < 0)
 	{
 		mLogger->critical("Failed to setup epoll interface");
 		throw std::runtime_error("Failed to seetup epoll interface");
 	}
+
+	SetupSignalWatcher();
 }
 
-void EventLoop::Run()
+int EventLoop::Run()
 {
 	mLogger->info("Eventloop has started");
 	while (true)
 	{
-		mEpollReturn = epoll_wait(mEpollFd, mEpollEvents, MaxEpollEvents, 0);
+		mEpollReturn = ::epoll_wait(mEpollFd, mEpollEvents, MaxEpollEvents, 0);
 		//mLogger->info("epoll_wait returned: {}", mEpollReturn);
 		if(mEpollReturn < 0)
 		{
@@ -48,7 +50,31 @@ void EventLoop::Run()
 				}
 				else if(mEpollEvents[event].events & EPOLLIN)
 				{
-					mFdHandlers[mEpollEvents[event].data.fd]->OnFiledescriptorRead(mEpollEvents[event].data.fd);
+					if(mEpollEvents[event].data.fd == mSignalFd)
+					{
+						const size_t s = ::read(mSignalFd, &mFDSI, sizeof(struct signalfd_siginfo));
+						if(s != sizeof(struct signalfd_siginfo))
+						{
+							mLogger->critical("Error reading signal fd:{}, errno:{}", mSignalFd, errno);
+							throw std::runtime_error("Error reading signalfd");
+						}
+
+						if(mFDSI.ssi_signo == SIGINT)
+						{
+							mLogger->info("Got SIGINT, shutting down application");
+							return 0;
+						}
+						else if(mFDSI.ssi_signo == SIGQUIT)
+						{
+							mLogger->info("Got SIGQUIT, shutting down application");
+							return 0;
+						}
+						//mLogger->info("Got signal:{}, shutting down application", mFDSI.ssi_signo
+					}
+					else
+					{
+						mFdHandlers[mEpollEvents[event].data.fd]->OnFiledescriptorRead(mEpollEvents[event].data.fd);
+					}
 				}
 				else if(mEpollEvents[event].events & EPOLLOUT)
 				{
@@ -106,7 +132,7 @@ void EventLoop::RegisterFiledescriptor(int fd, uint32_t events, IFiledescriptorC
 	event.events = events;
 	if (epoll_ctl(mEpollFd, EPOLL_CTL_ADD, fd, &event) == -1)
 	{
-		mLogger->error("Failed to add fd to epoll interface, errno:{}", errno);
+		mLogger->critical("Failed to add fd to epoll interface, errno:{}", errno);
 		throw std::runtime_error("Failed to add fd to epoll interface");
 	}
 	mFdHandlers.insert({fd, handler});
@@ -120,7 +146,7 @@ void EventLoop::ModifyFiledescriptor(int fd, uint32_t events, IFiledescriptorCal
 	event.events = events;
 	if (epoll_ctl(mEpollFd, EPOLL_CTL_MOD, fd, &event) == -1)
 	{
-		mLogger->error("Failed to mod fd to epoll interface, errno:{}", errno);
+		mLogger->critical("Failed to mod fd to epoll interface, errno:{}", errno);
 		throw std::runtime_error("Failed to mod fd to epoll interface");
 	}
 	mFdHandlers.insert({fd, handler});
@@ -134,7 +160,7 @@ void EventLoop::UnregisterFiledescriptor(int fd)
 	event.events = 0;
 	if (epoll_ctl(mEpollFd, EPOLL_CTL_DEL, fd, &event) == -1)
 	{
-		mLogger->error("Failed to del fd to epoll interface, errno:{}", errno);
+		mLogger->critical("Failed to del fd to epoll interface, errno:{}", errno);
 		throw std::runtime_error("Failed to del fd to epoll interface");
 	}
 
@@ -154,6 +180,37 @@ void EventLoop::PrintStatistics() noexcept
 {
 	mLogger->info("EventLoop statistics -> Cycles: {}", mCycleCount);
 	mCycleCount = 0;
+}
+
+void EventLoop::SetupSignalWatcher()
+{
+	::sigemptyset(&mSigMask);
+	::sigaddset(&mSigMask, SIGINT);
+	::sigaddset(&mSigMask, SIGQUIT);
+
+	if(::sigprocmask(SIG_BLOCK, &mSigMask, NULL) == -1)
+	{
+		mLogger->critical("Failed to block other signal handlers, errno:{}", errno);
+		throw std::runtime_error("Failed to block other signal handlers");
+	}
+
+	mSignalFd = ::signalfd(-1, &mSigMask, SFD_NONBLOCK|SFD_CLOEXEC);
+
+	if(mSignalFd == -1)
+	{
+		mLogger->critical("Failed to create signal watcher, errno:{}", errno);
+		throw std::runtime_error("Failed to create signal watcher");
+	}
+
+	struct epoll_event event;
+	event.data.fd = mSignalFd;
+	event.events = EPOLLIN;
+	if(::epoll_ctl(mEpollFd, EPOLL_CTL_ADD, mSignalFd, &event) == -1)
+	{
+		mLogger->critical("Failed to add signalFd to epoll interface, errno:{}", errno);
+		throw std::runtime_error("Failed to add signalFd to epoll interface");
+	}
+
 }
 
 }

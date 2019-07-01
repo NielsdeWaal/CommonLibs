@@ -8,6 +8,8 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/signalfd.h>
+#include <signal.h>
 
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/bin_to_hex.h>
@@ -41,7 +43,7 @@ class EventLoop
 public:
 	EventLoop();
 
-	void Run();
+	int Run();
 	void Stop();
 
 	enum class TimerType : std::uint8_t {
@@ -109,6 +111,8 @@ public:
 private:
 	void PrintStatistics() noexcept;
 
+	void SetupSignalWatcher();
+
 	static constexpr int MaxEpollEvents = 64;
 
 	bool mStarted;
@@ -125,6 +129,10 @@ private:
 	std::unordered_map<int, IFiledescriptorCallbackHandler*> mFdHandlers;
 	// void CleanupTimers();
 	// Single timer class with enum state dictating if timer is repeating or not
+
+	int mSignalFd = 0;
+	sigset_t mSigMask;
+	struct signalfd_siginfo mFDSI;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
