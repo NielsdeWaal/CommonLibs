@@ -6,10 +6,10 @@ EventLoop::EventLoop()
 	: mStarted(true)
 	, mStatsTimer(1s, TimerType::Repeating, [this](){ PrintStatistics(); })
 {
-	auto eventloopLogger = spdlog::stdout_color_mt("EventLoop");
+	const auto eventloopLogger = spdlog::stdout_color_mt("EventLoop");
 	mLogger = spdlog::get("EventLoop");
 
-	mEpollFd = ::epoll_create1(0);
+	mEpollFd = ::epoll_create1(EPOLL_CLOEXEC);
 	if(mEpollFd < 0)
 	{
 		mLogger->critical("Failed to setup epoll interface");
@@ -24,20 +24,16 @@ int EventLoop::Run()
 	mLogger->info("Eventloop has started");
 	while (true)
 	{
-		mEpollReturn = ::epoll_wait(mEpollFd, mEpollEvents, MaxEpollEvents, 0);
-		//mLogger->info("epoll_wait returned: {}", mEpollReturn);
+		mEpollReturn = ::epoll_wait(mEpollFd, mEpollEvents, MaxEpollEvents, mEpollTimeout);
+		mLogger->trace("epoll_wait returned: {}", mEpollReturn);
 		if(mEpollReturn < 0)
 		{
 			mLogger->critical("Error on epoll");
 			throw std::runtime_error("Error on epoll");
 		}
-		//else if(mEpollReturn == 0)
-		//{
-		//	mLogger->info("No event on epoll");
-		//}
 		else
 		{
-			//mLogger->info("{} events on fd's", mEpollReturn);
+			mLogger->trace("{} events on fd's", mEpollReturn);
 			for(int event = 0; event < mEpollReturn; ++event)
 			{
 				if (mEpollEvents[event].events & EPOLLERR ||
@@ -69,7 +65,6 @@ int EventLoop::Run()
 							mLogger->info("Got SIGQUIT, shutting down application");
 							return 0;
 						}
-						//mLogger->info("Got signal:{}, shutting down application", mFDSI.ssi_signo
 					}
 					else
 					{
@@ -93,8 +88,44 @@ int EventLoop::Run()
 
 		for(const auto& [callback, latencyClass] : mCallbacks)
 		{
-			//TODO Implement latencyclass
+			/**
+			 * Two different methods are available for scheduling timers with a high latency.
+			 *
+			 * The problem with the first one is that it requires modulo operations.
+			 * These are slow.
+			 *
+			 * The second one attempts to circumvent this by using a simple counter.
+			 * Initial testing seems to indicate that both have an equal effect on the cycles per second count.
+			 */
 			callback->OnEventLoopCallback();
+			/*
+			if(latencyClass == LatencyType::Low)
+			{
+				callback->OnEventLoopCallback();
+			}
+			else if(latencyClass == LatencyType::High && mCycleCount % 1000)
+			{
+				callback->OnEventLoopCallback();
+			}
+			*/
+			/*
+			if(latencyClass == LatencyType::Low)
+			{
+				callback->OnEventLoopCallback();
+			}
+			else
+			{
+				if(mTimerIterationCounter == 1000)
+				{
+					callback->OnEventLoopCallback();
+					mTimerIterationCounter = 0;
+				}
+				else
+				{
+					++mTimerIterationCounter;
+				}
+			}
+			*/
 		}
 
 		for(const auto& timer : mTimers)
@@ -104,9 +135,13 @@ int EventLoop::Run()
 				timer->mCallback();
 				//mLogger->info("Timer has expired after {}", std::chrono::seconds(timer.mDuration).count());
 				if(timer->mType == TimerType::Oneshot)
+				{
 					mTimers.erase(std::remove(std::begin(mTimers), std::end(mTimers), timer), std::end(mTimers));
+				}
 				else
+				{
 					timer->UpdateDeadline();
+				}
 			}
 		}
 
@@ -127,7 +162,7 @@ void EventLoop::RegisterCallbackHandler(IEventLoopCallbackHandler* callback, Lat
 
 void EventLoop::RegisterFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler)
 {
-	struct epoll_event event;
+	struct epoll_event event{};
 	event.data.fd = fd;
 	event.events = events;
 	if (epoll_ctl(mEpollFd, EPOLL_CTL_ADD, fd, &event) == -1)
@@ -141,7 +176,7 @@ void EventLoop::RegisterFiledescriptor(int fd, uint32_t events, IFiledescriptorC
 
 void EventLoop::ModifyFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler)
 {
-	struct epoll_event event;
+	struct epoll_event event{};
 	event.data.fd = fd;
 	event.events = events;
 	if (epoll_ctl(mEpollFd, EPOLL_CTL_MOD, fd, &event) == -1)
@@ -155,7 +190,7 @@ void EventLoop::ModifyFiledescriptor(int fd, uint32_t events, IFiledescriptorCal
 
 void EventLoop::UnregisterFiledescriptor(int fd)
 {
-	struct epoll_event event;
+	struct epoll_event event{};
 	event.data.fd = fd;
 	event.events = 0;
 	if (epoll_ctl(mEpollFd, EPOLL_CTL_DEL, fd, &event) == -1)
@@ -168,6 +203,16 @@ void EventLoop::UnregisterFiledescriptor(int fd)
 	mFdHandlers.erase(lookup);
 
 	mLogger->info("Unregistered Fd: {}", fd);
+}
+
+bool EventLoop::IsRegistered(const int fd)
+{
+	const auto lookup = mFdHandlers.find(fd);
+	if(lookup == mFdHandlers.end())
+	{
+		return false;
+	}
+	return true;
 }
 
 void EventLoop::EnableStatistics() noexcept
@@ -202,7 +247,7 @@ void EventLoop::SetupSignalWatcher()
 		throw std::runtime_error("Failed to create signal watcher");
 	}
 
-	struct epoll_event event;
+	struct epoll_event event{};
 	event.data.fd = mSignalFd;
 	event.events = EPOLLIN;
 	if(::epoll_ctl(mEpollFd, EPOLL_CTL_ADD, mSignalFd, &event) == -1)
@@ -211,6 +256,12 @@ void EventLoop::SetupSignalWatcher()
 		throw std::runtime_error("Failed to add signalFd to epoll interface");
 	}
 
+}
+
+void EventLoop::SheduleForNextCycle(const std::function<void()> func) noexcept
+{
+	mShortTimers.push_back(Timer(0s, TimerType::Oneshot, func));
+	AddTimer(&mShortTimers.back());
 }
 
 }

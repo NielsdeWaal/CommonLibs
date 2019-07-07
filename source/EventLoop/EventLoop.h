@@ -6,9 +6,9 @@
 #include <vector>
 
 #include <sys/epoll.h>
+#include <sys/signalfd.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <sys/signalfd.h>
 #include <signal.h>
 
 #include <spdlog/spdlog.h>
@@ -21,7 +21,14 @@ namespace EventLoop {
 
 using namespace std::chrono_literals;
 
-
+/**
+ * @brief virtual class for eventloop callback
+ *
+ * Inherit this virtual class when a callback has to be registerd in the eventloop.
+ * This callback will be called at a rate depending on the LatencyType.
+ *
+ * Register the callback using the RegisterCallbackHandler() function.
+ */
 class IEventLoopCallbackHandler
 {
 public:
@@ -29,6 +36,12 @@ public:
 	virtual ~IEventLoopCallbackHandler() {}
 };
 
+/**
+ * @brief Callback handler for filedescriptors
+ *
+ * Each overload function will be called upon the relevant event.
+ * Events can be registerd using the RegisterFiledescriptor and ModifyFiledescriptor functions.
+ */
 class IFiledescriptorCallbackHandler
 {
 public:
@@ -105,8 +118,11 @@ public:
 	void RegisterFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler);
 	void ModifyFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler);
 	void UnregisterFiledescriptor(int fd);
+	bool IsRegistered(const int fd);
 
 	void EnableStatistics() noexcept;
+
+	void SheduleForNextCycle(const std::function<void()> func) noexcept;
 
 private:
 	void PrintStatistics() noexcept;
@@ -121,12 +137,17 @@ private:
 	long mCycleCount = 0;
 
 	std::vector<Timer*> mTimers;
+
+	// Need to change mTimers to use unique_ptr's.
+	// This way we can get rid of this backup vector
+	std::vector<Timer> mShortTimers;
 	std::unordered_map<IEventLoopCallbackHandler*, LatencyType> mCallbacks;
 
 	int mEpollFd = 0;
 	int mEpollReturn = 0;
 	struct epoll_event mEpollEvents[MaxEpollEvents];
 	std::unordered_map<int, IFiledescriptorCallbackHandler*> mFdHandlers;
+	int mEpollTimeout = 0;
 	// void CleanupTimers();
 	// Single timer class with enum state dictating if timer is repeating or not
 
@@ -134,9 +155,11 @@ private:
 	sigset_t mSigMask;
 	struct signalfd_siginfo mFDSI;
 
+	//int mTimerIterationCounter = 0;
+
 	std::shared_ptr<spdlog::logger> mLogger;
 };
 
-}
+} // namespace EventLoop
 
 #endif // EVENTLOOP_H
