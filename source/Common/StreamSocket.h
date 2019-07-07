@@ -211,10 +211,20 @@ public:
 		}
 	}
 
+	~StreamSocketServer()
+	{
+		if(mEventLoop.IsRegistered(mFd))
+		{
+			mEventLoop.UnregisterFiledescriptor(mFd);
+		}
+
+		::close(mFd);
+	}
+
 	void BindAndListen(uint16_t port)
 	{
 		//const uint16_t port = ::atoi(port);
-		sockaddr_in addr;
+		sockaddr_in addr{};
 		addr.sin_family = AF_INET;
 		addr.sin_port = ::htons(port);
 		addr.sin_addr.s_addr = INADDR_ANY;
@@ -233,6 +243,17 @@ public:
 		mEventLoop.RegisterFiledescriptor(mFd, EPOLLIN, this);
 
 		mLogger->info("Started TCP server fd:{}, port:{}", mFd, port);
+	}
+
+	void Shutdown()
+	{
+		mLogger->info("Shutting down streamsocket server");
+		for(const auto& conn : mConnections)
+		{
+			conn->Shutdown();
+		}
+
+		mEventLoop.UnregisterFiledescriptor(mFd);
 	}
 
 private:
