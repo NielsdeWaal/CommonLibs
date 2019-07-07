@@ -27,18 +27,28 @@ public:
 		//mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
 	}
 
-	~ExampleApp() {}
+	~ExampleApp()
+	{
+		mSocket.Shutdown();
+		mServer.Shutdown();
+	}
 
 	void Initialise()
 	{
-		//mEv.AddTimer(&mTimer);
+		mEv.AddTimer(&mTimer);
 		mServer.BindAndListen(1337);
 		mSocket.Connect("127.0.0.1", 1337);
 	}
 
 	void OnTimerCallback()
 	{
-		mLogger->info("Got callback from timer");
+		//mLogger->info("Got callback from timer");
+		mSocket.Send(Teststring.c_str(), Teststring.size());
+	}
+
+	void OnNextCycle()
+	{
+		mLogger->info("Callback from next cycle");
 	}
 
 	void OnEventLoopCallback() final
@@ -59,7 +69,8 @@ public:
 	void OnIncomingData(Common::StreamSocket* conn, char* data, size_t len) final
 	{
 		mLogger->info("Incoming: {}", std::string{data});
-		conn->Send(data, len);
+		//conn->Send(data, len);
+		mEv.SheduleForNextCycle([this](){OnNextCycle();});
 	}
 
 	Common::IStreamSocketHandler* OnIncomingConnection() final
@@ -76,6 +87,8 @@ private:
 
 	int mFd = 0;
 	char mSockBuf[100];
+
+	std::string Teststring{"Test string"};
 
 	std::shared_ptr<spdlog::logger> mLogger;
 
