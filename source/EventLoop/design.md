@@ -3,9 +3,11 @@
 -	{DONE} FD Watcher with callback to handler class -> OnFDRead and OnFDWrite
 -	{DONE} Timer structure -> Every cycle of the loop we need to check if a timer has expired
 -	{DONE} Cycle stats -> See how many cycles have been ran every second
--	Have option for choosing between normal timer and linux timerfd -> this would mean that users would have a choice between "run-hot" and waiting for timerfd
--	Have callback scheduled for next cycle -> give options for function to be executed on the next cycle
+-	Have option for choosing between normal timer and linux timerfd -> this would mean that users would have a choice between "run-hot" and waiting for timerfd -> no timerfd, just timeout value on the epoll call
+-	{DONE} Latency class on callback classes -> Not all classes have to be called every cycle, high latency callback should be either 1000 cycles or be specifiable
+-	{DONE} Have callback scheduled for next cycle -> give options for function to be executed on the next cycle
 	-	OnFdWrite() for scheduling write on socket for next cycle
+		-	Right now implemented using oneshot timer, check this for more clean approach
 -	Stats output should include timer for measuring in between prints
 	-	https://github.com/fmtlib/fmt/releases/tag/5.3.0
 -	Threadpool
