@@ -10,7 +10,18 @@
 		-	Right now implemented using oneshot timer, check this for more clean approach
 -	{DONE} Stats output should include timer for measuring in between prints
 	-	https://github.com/fmtlib/fmt/releases/tag/5.3.0
+-	UDP socket
+	-	Can lift from streamsocket
 -	Threadpool
 	-	Jobs get announced to the eventloop, upon each cycle jobs get distributed to the pool
 -	Have amount of polls done on fd's outputed by stats
 	-	Should be #fd's in watchlist * #cycles
+-	Settings file
+	-	Users need to be able to define config file options for their application
+	-	TOML files seem like the easiest to setup and define
+-	Async db library
+	-	SQLite
+	-	PostgresQL
+-	Low-latency websockets
+	-	Websockets see an increase in usage accros the web, need way to quickly respond
+-	InfluxDB writer
