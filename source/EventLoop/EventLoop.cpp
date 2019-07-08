@@ -21,6 +21,7 @@ EventLoop::EventLoop()
 
 int EventLoop::Run()
 {
+	mStatsTime = std::chrono::high_resolution_clock::now();
 	mLogger->info("Eventloop has started");
 	while (true)
 	{
@@ -223,8 +224,14 @@ void EventLoop::EnableStatistics() noexcept
 
 void EventLoop::PrintStatistics() noexcept
 {
-	mLogger->info("EventLoop statistics -> Cycles: {}", mCycleCount);
+	auto interval = std::chrono::high_resolution_clock::now() - mStatsTime;
+
+	mLogger->info("EventLoop statistics -> Cycles: {} Interval: {}ms",
+			mCycleCount,
+			std::chrono::duration_cast<std::chrono::milliseconds>(interval).count());
+
 	mCycleCount = 0;
+	mStatsTime = std::chrono::high_resolution_clock::now();
 }
 
 void EventLoop::SetupSignalWatcher()
@@ -256,6 +263,19 @@ void EventLoop::SetupSignalWatcher()
 		throw std::runtime_error("Failed to add signalFd to epoll interface");
 	}
 
+}
+
+void EventLoop::ToggleRunHot() noexcept
+{
+	mRunHot = !mRunHot;
+	if(!mRunHot)
+	{
+		mEpollTimeout = 20;
+	}
+	else
+	{
+		mEpollTimeout = 0;
+	}
 }
 
 void EventLoop::SheduleForNextCycle(const std::function<void()> func) noexcept

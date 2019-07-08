@@ -71,8 +71,8 @@ public:
 
 	struct Timer
 	{
-		using TimePoint = std::chrono::steady_clock::time_point;
-		using Clock = std::chrono::steady_clock;
+		using TimePoint = std::chrono::high_resolution_clock::time_point;
+		using Clock = std::chrono::high_resolution_clock;
 		using seconds = std::chrono::seconds;
 
 		Timer(seconds duration, TimerType type, std::function<void()> callback)
@@ -124,6 +124,8 @@ public:
 
 	void SheduleForNextCycle(const std::function<void()> func) noexcept;
 
+	void ToggleRunHot() noexcept;
+
 private:
 	void PrintStatistics() noexcept;
 
@@ -135,6 +137,8 @@ private:
 	bool mStatistics;
 	Timer mStatsTimer;
 	long mCycleCount = 0;
+	std::chrono::high_resolution_clock::time_point mStatsTime;
+	bool mRunHot = true;
 
 	std::vector<Timer*> mTimers;
 
