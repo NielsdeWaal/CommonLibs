@@ -5,11 +5,11 @@ namespace EventLoop {
 EventLoop::EventLoop()
 	: mStarted(true)
 	, mStatsTimer(1s, TimerType::Repeating, [this](){ PrintStatistics(); })
+	, mEpollFd(::epoll_create1(EPOLL_CLOEXEC))
 {
 	const auto eventloopLogger = spdlog::stdout_color_mt("EventLoop");
 	mLogger = spdlog::get("EventLoop");
 
-	mEpollFd = ::epoll_create1(EPOLL_CLOEXEC);
 	if(mEpollFd < 0)
 	{
 		mLogger->critical("Failed to setup epoll interface");

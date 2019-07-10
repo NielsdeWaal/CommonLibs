@@ -147,7 +147,7 @@ private:
 	std::vector<Timer> mShortTimers;
 	std::unordered_map<IEventLoopCallbackHandler*, LatencyType> mCallbacks;
 
-	int mEpollFd = 0;
+	const int mEpollFd = 0;
 	int mEpollReturn = 0;
 	struct epoll_event mEpollEvents[MaxEpollEvents];
 	std::unordered_map<int, IFiledescriptorCallbackHandler*> mFdHandlers;
