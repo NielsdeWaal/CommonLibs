@@ -8,12 +8,14 @@
 #include "EventLoop.h"
 
 #include "StreamSocket.h"
+#include "UDPSocket.h"
 
 using namespace std::chrono_literals;
 
 class ExampleApp : public EventLoop::IEventLoopCallbackHandler
 				 , public Common::IStreamSocketHandler
 				 , public Common::IStreamSocketServerHandler
+				 , public Common::IUDPSocketHandler
 {
 public:
 	ExampleApp(EventLoop::EventLoop& ev)
@@ -21,6 +23,7 @@ public:
 		, mTimer(1s, EventLoop::EventLoop::TimerType::Repeating, [this](){ OnTimerCallback(); })
 		, mSocket(mEv, this)
 		, mServer(mEv, this)
+		, mUDPClient(mEv, this)
 	{
 		auto eventloopLogger = spdlog::stdout_color_mt("ExampleApp");
 		mLogger = spdlog::get("ExampleApp");
@@ -44,6 +47,7 @@ public:
 	{
 		//mLogger->info("Got callback from timer");
 		mSocket.Send(Teststring.c_str(), Teststring.size());
+		mUDPClient.Send(Teststring.c_str(), Teststring.size(), "127.0.0.1", 9999);
 	}
 
 	void OnNextCycle()
@@ -84,6 +88,7 @@ private:
 
 	Common::StreamSocket mSocket;
 	Common::StreamSocketServer mServer;
+	Common::UDPSocket mUDPClient;
 
 	int mFd = 0;
 	char mSockBuf[100];
