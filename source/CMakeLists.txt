@@ -8,7 +8,7 @@ include(sanitizers)
 if(MSVC)
     add_compile_options(/std:c++14 /W3 /WX )
 else()
-    add_compile_options(-std=c++17 -Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wunused -pedantic)
+	add_compile_options(-std=c++17 -Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wunused -Wpedantic)
 endif()
 
 # configure version.cpp.in with selected version
@@ -45,11 +45,12 @@ add_executable(CommonLibs
 	EventLoop/EventLoop.cpp
 	EventLoop/EventLoop.h
 	Common/StreamSocket.h
+	Common/UDPSocket.h
 	Example.h
     main.cpp)
 add_dependencies(CommonLibs versionFileTouchForRebuild) # We want precise time of build in version
 target_include_directories(CommonLibs PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} EventLoop Common)
-target_link_libraries (CommonLibs PRIVATE Threads::Threads)
+target_link_libraries(CommonLibs PRIVATE Threads::Threads)
 target_link_libraries(CommonLibs PRIVATE spdlog)
 
 install(TARGETS CommonLibs
