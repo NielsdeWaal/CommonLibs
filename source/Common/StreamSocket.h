@@ -58,17 +58,16 @@ public:
 	}
 
 	//void Connect(uint32_t addr, uint16_t port)
-	void Connect(const char* addr, const uint16_t port)
+	void Connect(const char* addr, const uint16_t port) noexcept
 	{
-		mPort = port;
-
 		remote.sin_addr.s_addr = ::inet_addr(addr);
 		//remote.sin_addr.s_addr = addr;
 		remote.sin_family = AF_INET;
-		remote.sin_port = htons(mPort);
+		remote.sin_port = htons(port);
 
-		auto ret = ::connect(mFd, (struct sockaddr *)&remote, sizeof(struct sockaddr));
+		const int ret = ::connect(mFd, (struct sockaddr *)&remote, sizeof(struct sockaddr));
 
+		//TODO Handle error case
 		if((ret == -1) && (errno == EINPROGRESS))
 		{
 			//mLogger->critical("Connect failed, code:{}", ret);
@@ -177,7 +176,7 @@ private:
 	struct sockaddr_in remote;
 
 	uint32_t mAddress = 0;
-	uint16_t mPort = 0;
+	//uint16_t mPort = 0;
 
 	bool mConnected = false;
 	bool mSendInProgress = false;
