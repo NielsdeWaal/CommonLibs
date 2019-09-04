@@ -99,7 +99,12 @@ public:
 		}
 		else
 		{
-			mLogger->warn("Default addr not yet implemented, skipping send");
+			const auto ret = ::send(mFd, data, len, MSG_DONTWAIT);
+
+			if((ret == -1) && (errno == EINPROGRESS))
+			{
+				mLogger->error("UDP send failed with errno:{}", errno);
+			}
 		}
 	}
 
