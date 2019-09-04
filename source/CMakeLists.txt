@@ -52,6 +52,7 @@ add_dependencies(CommonLibs versionFileTouchForRebuild) # We want precise time o
 target_include_directories(CommonLibs PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} EventLoop Common)
 target_link_libraries(CommonLibs PRIVATE Threads::Threads)
 target_link_libraries(CommonLibs PRIVATE spdlog)
+target_link_libraries(CommonLibs PRIVATE cpptoml)
 
 install(TARGETS CommonLibs
     BUNDLE DESTINATION "."
