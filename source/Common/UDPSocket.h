@@ -49,7 +49,24 @@ public:
 
 	void Connect(const char* addr, const uint16_t port) noexcept
 	{
+		assert(port > 0);
 
+		remote.sin_addr.s_addr = ::inet_addr(addr);
+		//remote.sin_addr.s_addr = addr;
+		remote.sin_family = AF_INET;
+		remote.sin_port = htons(port);
+
+		const int ret = ::connect(mFd, (struct sockaddr *)&remote, sizeof(struct sockaddr));
+
+		//TODO Handle error case
+		if((ret == -1) && (errno == EINPROGRESS))
+		{
+			mLogger->critical("Connect failed, code:{}", ret);
+			//throw std::runtime_error("Connect failed");
+			//mEventLoop.RegisterFiledescriptor(mFd, EPOLLIN | EPOLLOUT, this);
+		}
+
+		mPort = port;
 	}
 
 	void StartListening(const char* localAddr, const uint16_t localPort) noexcept
@@ -61,19 +78,19 @@ public:
 	{
 		if(dst != nullptr)
 		{
-			struct sockaddr_in remote;
-			remote.sin_addr.s_addr = ::inet_addr(dst);
-			remote.sin_family = AF_INET;
+			struct sockaddr_in tempRemote;
+			tempRemote.sin_addr.s_addr = ::inet_addr(dst);
+			tempRemote.sin_family = AF_INET;
 			if(port == 0)
 			{
-				remote.sin_port = htons(mPort);
+				tempRemote.sin_port = htons(mPort);
 			}
 			else
 			{
-				remote.sin_port = htons(port);
+				tempRemote.sin_port = htons(port);
 			}
 
-			const auto ret = ::sendto(mFd, data, len, MSG_DONTWAIT, (struct sockaddr *)&remote, sizeof(struct sockaddr));
+			const auto ret = ::sendto(mFd, data, len, MSG_DONTWAIT, (struct sockaddr *)&tempRemote, sizeof(struct sockaddr));
 
 			if((ret == -1) && (errno == EINPROGRESS))
 			{
@@ -103,6 +120,8 @@ private:
 
 	const int mFd = 0;
 	bool mAddrSet = false;
+
+	struct sockaddr_in remote;
 
 	uint16_t mPort = 0;
 
