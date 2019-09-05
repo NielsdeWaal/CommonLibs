@@ -35,6 +35,17 @@ public:
 	 * safety of removing that reference when the data is out-of-use.
 	 * IDEAS:
 	 *	- Template ref with name (e.g template<auto& var, string name>)
+         *
+         * \code
+         * include "StatWriter.h"
+         *
+         * void A::setup_metrics() {
+         *   namespace sw = StatWriter::metrics;
+         *   _metrics = sw::create_metric_group();
+         *   _metrics->add_group("cache", {sm::make_gauge("bytes", "used", [this] { return _region.occupancy().used_space(); })});
+         * }
+         * \endcode
+         *
 	 */
 	//void AddToBatch() noexcept
 
