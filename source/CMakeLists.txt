@@ -46,6 +46,7 @@ add_executable(CommonLibs
 	EventLoop/EventLoop.h
 	Common/StreamSocket.h
 	Common/UDPSocket.h
+        Common/ThreadPool.h
 	Example.h
     main.cpp)
 add_dependencies(CommonLibs versionFileTouchForRebuild) # We want precise time of build in version

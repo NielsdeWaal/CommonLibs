@@ -161,6 +161,8 @@ private:
 
 	//int mTimerIterationCounter = 0;
 
+        ThreadPool mThreadPool;
+
 	std::shared_ptr<spdlog::logger> mLogger;
 };
 
