@@ -1,9 +1,15 @@
 #ifndef UDPSOCKET_H
 #define UDPSOCKET_H
 
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+
 #include "EventLoop.h"
 
 namespace Common {
+
+using namespace EventLoop;
 
 /**
  * Afer socket has been created, we can send data.

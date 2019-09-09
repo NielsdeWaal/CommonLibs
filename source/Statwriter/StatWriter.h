@@ -8,6 +8,12 @@ namespace StatWriter {
 
 class StatWriter : public Common::IUDPSocketHandler
 {
+private:
+	struct StatDefinition
+	{
+		std::string mLabel;
+		std::function<int()> mStatFunction;
+	};
 public:
 	StatWriter(EventLoop::EventLoop& ev)
 		: mEventLoop(ev)
@@ -17,13 +23,23 @@ public:
 		mLogger = spdlog::get("StatWriter");
 	}
 
-	void InfluxConnector(const std::string& addr, const uint16_t port) const noexcept
+	void InfluxConnector(const std::string& addr, const uint16_t port) noexcept
 	{
 		mSocket.Connect(addr.c_str(), port);
 	}
 
 	void SetBatchWriting(std::chrono::seconds interval) noexcept
-	{}
+	{
+		if(mTimerSet)
+		{
+			mLogger->warn("Changing timer interval not supported atm, skipping call");
+			return;
+		}
+		mBatchInterval = interval;
+		mTimer = EventLoop::EventLoop::Timer(interval, EventLoop::EventLoop::TimerType::Repeating, [this] { WriteBatch(); });
+		mEventLoop.AddTimer(&mTimer);
+		mTimerSet = true;
+	}
 
 	/**
 	 * @brief Add variable to timed batch
@@ -42,17 +58,27 @@ public:
 	 * void A::setup_metrics() {
 	 *   namespace sw = StatWriter::metrics;
 	 *   _metrics = sw::create_metric_group();
-	 *   _metrics->add_group("cache", {sm::make_gauge("bytes", "used", [this] { return _region.occupancy().used_space(); })});
+	 *   _metrics->add_group("cache", {sw::make_gauge("bytes", "used", [this] { return _region.occupancy().used_space(); })});
 	 * }
 	 * \endcode
 	 *
 	 */
+	void AddGroup(const std::string& label, const bool batch);
+	void AddFieldToGroup(const std::string& label, const std::function<int()> getter);
 	//void AddToBatch() noexcept
 
 private:
-	EventLoop::EventLoop& mEventLoop;
+	void WriteBatch();
 
-	UDPSocket mSocket;
+	EventLoop::EventLoop& mEventLoop;
+	EventLoop::EventLoop::Timer mTimer;
+	std::chrono::seconds mBatchInterval;
+	bool mTimerSet;
+
+	Common::UDPSocket mSocket;
+
+	//std::unordered_map<std::string, std::function<int()>> mBatchMeasurements;
+	//std::vector<>
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
