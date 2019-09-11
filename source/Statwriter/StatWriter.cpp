@@ -11,4 +11,15 @@ void StatWriter::AddFieldToGroup(const std::string& label, const std::function<i
 void StatWriter::WriteBatch()
 { }
 
+void StatWriter::AddMeasurementsToLine(InfluxDBLine& line, const std::string& label)
+{
+	const auto& currentBatch = mBatchMeasurements[label].second;
+	for(const auto& metric : currentBatch)
+	{
+		mFieldSet += std::string{metric()} + ",";
+	}
+
+	mFieldSet.pop_back();
+}
+
 }

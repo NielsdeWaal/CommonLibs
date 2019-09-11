@@ -4,6 +4,8 @@
 #include <EventLoop.h>
 #include <UDPSocket.h>
 
+#include <chrono>
+
 namespace StatWriter {
 
 class StatWriter : public Common::IUDPSocketHandler
@@ -14,6 +16,15 @@ private:
 		std::string mLabel;
 		std::function<int()> mStatFunction;
 	};
+
+	struct InfluxDBLine
+	{
+		std::string mMeasurement;
+		std::string mTagSet;
+		std::string mFieldSet;
+		std::chrono::time_point<std::chrono::high_resolution_clock> mTimestamp;
+	};
+
 public:
 	StatWriter(EventLoop::EventLoop& ev)
 		: mEventLoop(ev)
@@ -69,6 +80,7 @@ public:
 
 private:
 	void WriteBatch();
+	void AddMeasurementsToLine(InfluxDBLine& line, const std::string& label);
 
 	EventLoop::EventLoop& mEventLoop;
 	EventLoop::EventLoop::Timer mTimer;
@@ -79,6 +91,7 @@ private:
 
 	//std::unordered_map<std::string, std::function<int()>> mBatchMeasurements;
 	//std::vector<>
+	std::unordered_map<std::string, std::vector<std::function<int()>> mBatchMeasurements;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
