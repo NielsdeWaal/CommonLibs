@@ -1,12 +1,16 @@
 #ifndef STATWRITER_H
 #define STATWRITER_H
 
+#include <spdlog/fmt/ostr.h>
+
 #include <EventLoop.h>
 #include <UDPSocket.h>
 
 #include <chrono>
 
 namespace StatWriter {
+
+using namespace std::string_literals;
 
 class StatWriter : public Common::IUDPSocketHandler
 {
@@ -19,10 +23,22 @@ private:
 
 	struct InfluxDBLine
 	{
-		std::string mMeasurement;
-		std::string mTagSet;
-		std::string mFieldSet;
+		std::string mMeasurement = "";
+		std::string mTagSet = "";
+		std::string mFieldSet = "";
 		std::chrono::time_point<std::chrono::high_resolution_clock> mTimestamp;
+		template<typename OStream>
+		friend OStream &operator<<(OStream &os, const InfluxDBLine &l)
+		{
+			if(l.mTagSet != "")
+			{
+				return os << l.mMeasurement << " " << l.mTagSet << " " << l.mFieldSet; // << " " << l.mTimestamp;
+			}
+			else
+			{
+				return os << l.mMeasurement << " " << l.mFieldSet; // << " " << l.mTimestamp;
+			}
+		}
 	};
 
 public:
@@ -33,6 +49,8 @@ public:
 		auto streamSocketLogger = spdlog::stdout_color_mt("StatWriter");
 		mLogger = spdlog::get("StatWriter");
 	}
+
+	void DebugLineMessages();
 
 	void InfluxConnector(const std::string& addr, const uint16_t port) noexcept
 	{
@@ -75,12 +93,12 @@ public:
 	 *
 	 */
 	void AddGroup(const std::string& label, const bool batch);
-	void AddFieldToGroup(const std::string& label, const std::function<int()> getter);
+	void AddFieldToGroup(const std::string& group, const std::string& label, const std::function<int()> getter);
 	//void AddToBatch() noexcept
 
 private:
 	void WriteBatch();
-	void AddMeasurementsToLine(InfluxDBLine& line, const std::string& label);
+	void AddMeasurementsToLine(InfluxDBLine& line, const std::string& group);
 
 	EventLoop::EventLoop& mEventLoop;
 	EventLoop::EventLoop::Timer mTimer;
@@ -89,9 +107,10 @@ private:
 
 	Common::UDPSocket mSocket;
 
-	//std::unordered_map<std::string, std::function<int()>> mBatchMeasurements;
-	//std::vector<>
-	std::unordered_map<std::string, std::vector<std::function<int()>> mBatchMeasurements;
+	//FIXME
+	//Current implementation doesn't provide ordering for metrics written in line messages.
+	//Is this undesireable? No clue
+	std::unordered_map<std::string, std::unordered_map<std::string, std::function<int()>>> mBatchMeasurements;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
