@@ -10,6 +10,8 @@
 #include "StreamSocket.h"
 #include "UDPSocket.h"
 
+#include "Statwriter/StatWriter.h"
+
 using namespace std::chrono_literals;
 
 class ExampleApp : public EventLoop::IEventLoopCallbackHandler
@@ -24,10 +26,16 @@ public:
 		, mSocket(mEv, this)
 		, mServer(mEv, this)
 		, mUDPClient(mEv, this)
+		, mSW(mEv)
 	{
 		auto eventloopLogger = spdlog::stdout_color_mt("ExampleApp");
+		auto streamSocketLogger = spdlog::stdout_color_mt("UDPSocket");
 		mLogger = spdlog::get("ExampleApp");
 		//mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
+
+		mSW.AddGroup("DEBUG", true);
+		mSW.AddFieldToGroup("DEBUG", "Debug1", [this](){ mDebugMeasurementCounter++; return mDebugMeasurementCounter;});
+		mSW.AddFieldToGroup("DEBUG", "Debug2", [this](){ mDebugMeasurementCounter1++; return mDebugMeasurementCounter1;});
 	}
 
 	~ExampleApp()
@@ -46,8 +54,9 @@ public:
 	void OnTimerCallback()
 	{
 		//mLogger->info("Got callback from timer");
-		mSocket.Send(Teststring.c_str(), Teststring.size());
-		mUDPClient.Send(Teststring.c_str(), Teststring.size(), "127.0.0.1", 9999);
+		//mSocket.Send(Teststring.c_str(), Teststring.size());
+		//mUDPClient.Send(Teststring.c_str(), Teststring.size(), "127.0.0.1", 9999);
+		mSW.DebugLineMessages();
 	}
 
 	void OnNextCycle()
@@ -94,6 +103,10 @@ private:
 	char mSockBuf[100];
 
 	std::string Teststring{"Test string"};
+
+	StatWriter::StatWriter mSW;
+	int mDebugMeasurementCounter = 0;
+	int mDebugMeasurementCounter1 = 8;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 
