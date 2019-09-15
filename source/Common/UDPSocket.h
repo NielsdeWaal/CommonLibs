@@ -37,8 +37,12 @@ public:
 		, mHandler(handler)
 		, mFd(::socket(AF_INET, SOCK_DGRAM, 0))
 	{
-		//auto UDPSocketLogger = spdlog::stdout_color_mt("UDPSocket");
 		mLogger = spdlog::get("UDPSocket");
+		if(mLogger == nullptr)
+		{
+			auto UDPSocketLogger = spdlog::stdout_color_mt("UDPSocket");
+			mLogger = spdlog::get("UDPSocket");
+		}
 
 		fcntl(mFd, F_SETFL, O_NONBLOCK);
 	}

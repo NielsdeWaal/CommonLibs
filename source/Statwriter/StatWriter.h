@@ -46,8 +46,12 @@ public:
 		: mEventLoop(ev)
 		, mSocket(ev, this)
 	{
-		auto streamSocketLogger = spdlog::stdout_color_mt("StatWriter");
 		mLogger = spdlog::get("StatWriter");
+		if(mLogger == nullptr)
+		{
+			auto statWriterLogger = spdlog::stdout_color_mt("StatWriter");
+			mLogger = spdlog::get("StatWriter");
+		}
 	}
 
 	void DebugLineMessages();

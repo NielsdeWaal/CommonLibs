@@ -28,9 +28,12 @@ public:
 		, mUDPClient(mEv, this)
 		, mSW(mEv)
 	{
-		auto eventloopLogger = spdlog::stdout_color_mt("ExampleApp");
-		auto streamSocketLogger = spdlog::stdout_color_mt("UDPSocket");
 		mLogger = spdlog::get("ExampleApp");
+		if(mLogger == nullptr)
+		{
+			auto exampleAppLogger = spdlog::stdout_color_mt("ExampleApp");
+			mLogger = spdlog::get("ExampleApp");
+		}
 		//mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
 
 		mSW.AddGroup("DEBUG", true);
