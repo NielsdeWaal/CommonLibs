@@ -23,6 +23,32 @@ enum MQTTPacketType
 	DISCONNECT = 14,
 };
 
+// https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718022
+enum MQTTFlag
+{
+	CONNECT = 0,
+	CONNACK = 0,
+	PUBLISH = 0,
+	PUBACK = 0,
+	PUBREC = 0,
+	PUBREL = b'0010,
+	PUBCOMP = 7,
+	SUBSCRIBE = 8,
+	SUBACK = 9,
+	UNSUBSCRIBE = 10,
+	UNSUBACK = 11,
+	PINGREQ = 12,
+	PINGRESP = 13,
+	DISCONNECT = 14,
+};
+
+class MQTTPacket
+{
+	MQTTPacketType mType;
+	MQTTFlag mFlag;
+	std::size_t mRemainingLength;
+};
+
 class MQTTBroker : public Common::IStreamSocketHandler
 				 , public Common::IStreamSocketServerHandler
 {
