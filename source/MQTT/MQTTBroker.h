@@ -104,7 +104,11 @@ public:
 			}
 			mLogger->info("	Keep alive: {0:#04x} or {0:d} seconds", (data[10] << 8 | (data[11] & 0xFF)));
 			mLogger->info("	Client-ID length: {}", (data[12] << 8 | (data[13] & 0xFF)));
-			mLogger->info("Incoming Client-id: {}", std::string(data + 14));
+			mLogger->info("	Incoming Client-id: {}", std::string(data + 14));
+
+			mLogger->info("Sending CONNACK");
+			const char connack[] = {(static_cast<uint8_t>(MQTTPacketType::CONNACK) << 4), 2, 0, 0};
+			conn->Send(connack, sizeof(connack));
 		}
 		//mLogger->info("Incoming: {}", std::string{data});
 		//conn->Send(data, len);
