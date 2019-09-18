@@ -47,7 +47,7 @@ class MQTTPacket
 	MQTTPacketType mType;
 	//MQTTFlag mFlag;
 	std::size_t mRemainingLength;
-}; 
+};
 
 class MQTTBroker : public Common::IStreamSocketHandler
 				 , public Common::IStreamSocketServerHandler
@@ -70,6 +70,7 @@ public:
 		mMQTTServer.BindAndListen(1883);
 	}
 
+private:
 	void OnConnected() final
 	{
 		mLogger->info("Connection to client established");
@@ -110,6 +111,19 @@ public:
 			const char connack[] = {(static_cast<uint8_t>(MQTTPacketType::CONNACK) << 4), 2, 0, 0};
 			conn->Send(connack, sizeof(connack));
 		}
+		else if(static_cast<MQTTPacketType>(data[0] >> 4) == MQTTPacketType::PUBLISH)
+		{
+			mLogger->info("Incoming publish packet");
+			mLogger->info("	Fixed header flags: {0:#010b}", static_cast<uint8_t>(data[0] & 0x00FF));
+			mLogger->info("	Payload length: {:d} {:#04x}:{:#04x}", (data[2] << 8 | (data[3] & 0xFF)), data[2], data[3]);
+			mLogger->info("	Topic name: {}", std::string(data + 4, (data[2] << 8 | (data[3] & 0xFF))));
+			mLogger->info("	Topic payload: {}", std::string(data + (data[2] << 8 | (data[3] & 0xFF)) + 4, data[1] - (data[2] << 8 | (data[3] & 0xFF))));
+		}
+		else
+		{
+			mLogger->info("Unknown type, dumping packet");
+			mLogger->info("{}", std::string(data + 2, len - 2));
+		}
 		//mLogger->info("Incoming: {}", std::string{data});
 		//conn->Send(data, len);
 		//mEv.SheduleForNextCycle([this](){OnNextCycle();});
@@ -120,7 +134,6 @@ public:
 		return this;
 	}
 
-private:
 	EventLoop::EventLoop& mEv;
 	Common::StreamSocketServer mMQTTServer;
 	//std::vector<Common::StreamSocket> mClientConnections;
