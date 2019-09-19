@@ -28,6 +28,12 @@ namespace MQTTBroker {
 //mLogger->info("	Client-ID length: {}", (data[12] << 8 | (data[13] & 0xFF)));
 //mLogger->info("	Incoming Client-id: {}", std::string(data + 14));
 
+//mLogger->info("Incoming publish packet");
+//mLogger->info("	Fixed header flags: {0:#010b}", static_cast<uint8_t>(data[0] & 0x00FF));
+//mLogger->info("	Payload length: {:d} {:#04x}:{:#04x}", (data[2] << 8 | (data[3] & 0xFF)), data[2], data[3]);
+//mLogger->info("	Topic name: {}", std::string(data + 4, (data[2] << 8 | (data[3] & 0xFF))));
+//mLogger->info("	Topic payload: {}", std::string(data + (data[2] << 8 | (data[3] & 0xFF)) + 4, data[1] - (data[2] << 8 | (data[3] & 0xFF))));
+
 // https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718022
 //enum MQTTFlag
 //{
@@ -129,8 +135,17 @@ private:
 class MQTTPublishPacket
 {
 public:
-	//MQTTPublishPacket(const char* data)
-	//{}
+	MQTTPublishPacket(const char* data, size_t len)
+		: mTopicName(data, len)
+		, mTopicPayload(data + len)
+	{}
+
+	MQTTPublishPacket()
+	{}
+
+//private:
+	std::string mTopicName;
+	std::string mTopicPayload;
 };
 
 class MQTTPacket
@@ -146,8 +161,7 @@ public:
 		}
 		else if(mFixedHeader.mType == MQTTPacketType::PUBLISH)
 		{
-			//mPublish = MQTTPublishPacket(data + 4);
-			mPublish = MQTTPublishPacket();
+			mPublish = MQTTPublishPacket(data + 4, (data[2] << 8 | (data[3] & 0xFF)));
 		}
 	}
 
@@ -207,15 +221,12 @@ private:
 
 			case MQTTPacketType::PUBLISH:
 			{
-				mLogger->info("Incoming publish packet");
-				mLogger->info("	Fixed header flags: {0:#010b}", static_cast<uint8_t>(data[0] & 0x00FF));
-				mLogger->info("	Payload length: {:d} {:#04x}:{:#04x}", (data[2] << 8 | (data[3] & 0xFF)), data[2], data[3]);
-				mLogger->info("	Topic name: {}", std::string(data + 4, (data[2] << 8 | (data[3] & 0xFF))));
-				mLogger->info("	Topic payload: {}", std::string(data + (data[2] << 8 | (data[3] & 0xFF)) + 4, data[1] - (data[2] << 8 | (data[3] & 0xFF))));
+				mLogger->info("Incoming publish:");
+				mLogger->info("	topic: {}", incomingPacket.mPublish.mTopicName);
+				mLogger->info("	payload: {}", incomingPacket.mPublish.mTopicPayload);
 				break;
 			}
 		}
-
 
 		//std::visit(overloaded {
 		//		[](MQTTPacketType::CONNECT arg) {
