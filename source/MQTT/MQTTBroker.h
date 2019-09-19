@@ -1,27 +1,32 @@
 #ifndef MQTT_BROKER_H
 #define MQTT_BROKER_H
 
+#include <variant>
+
+#include <spdlog/fmt/ostr.h>
+
 #include "EventLoop.h"
 
 namespace MQTTBroker {
 
-enum MQTTPacketType
-{
-	CONNECT = 1,
-	CONNACK = 2,
-	PUBLISH = 3,
-	PUBACK = 4,
-	PUBREC = 5,
-	PUBREL = 6,
-	PUBCOMP = 7,
-	SUBSCRIBE = 8,
-	SUBACK = 9,
-	UNSUBSCRIBE = 10,
-	UNSUBACK = 11,
-	PINGREQ = 12,
-	PINGRESP = 13,
-	DISCONNECT = 14,
-};
+//mLogger->info("	Protocol name: {}", std::string(data + 4, 4));
+//mLogger->info("	Protocol level: {:#04x}", data[8]);
+//if(data[8] == 0x04)
+//{
+//	mLogger->info("	Version = 3.1.1");
+//}
+//if(!(data[9] & (1)))
+//{
+//	mLogger->info("	Valid conenct flags");
+//}
+//mLogger->info("	Connect flags: {0:#010b}", data[9]);
+//if(data[9] & (1 << 1))
+//{
+//	mLogger->info("	Connection request wants clean session");
+//}
+//mLogger->info("	Keep alive: {0:#04x} or {0:d} seconds", (data[10] << 8 | (data[11] & 0xFF)));
+//mLogger->info("	Client-ID length: {}", (data[12] << 8 | (data[13] & 0xFF)));
+//mLogger->info("	Incoming Client-id: {}", std::string(data + 14));
 
 // https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718022
 //enum MQTTFlag
@@ -42,11 +47,114 @@ enum MQTTPacketType
 //	DISCONNECT = 14,
 //};
 
-class MQTTPacket
+//Helper for packet type visitor
+//template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+//template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
+enum MQTTPacketType
 {
+	CONNECT = 1,
+	CONNACK = 2,
+	PUBLISH = 3,
+	PUBACK = 4,
+	PUBREC = 5,
+	PUBREL = 6,
+	PUBCOMP = 7,
+	SUBSCRIBE = 8,
+	SUBACK = 9,
+	UNSUBSCRIBE = 10,
+	UNSUBACK = 11,
+	PINGREQ = 12,
+	PINGRESP = 13,
+	DISCONNECT = 14,
+};
+
+class MQTTFixedHeader
+{
+public:
+	MQTTFixedHeader(const char* data)
+		: mType(static_cast<MQTTPacketType>(*data >> 4))
+		, mRemainingLength(data[1])
+	{}
+
+	MQTTFixedHeader()
+	{}
+
 	MQTTPacketType mType;
+private:
 	//MQTTFlag mFlag;
 	std::size_t mRemainingLength;
+};
+
+class MQTTConnectPacket
+{
+public:
+	MQTTConnectPacket(const char* data)
+		: mProtocolName(data, 4)
+		, mProtocolLevel(data[4])
+		, mConnectFlags(data[5])
+		, mKeepAlive(data[6] << 8 | (data[7] & 0xFF))
+		, mClientIDLength(data[8] << 8 | (data[9] & 0xFF))
+		, mClientID(data + 10)
+	{}
+
+	MQTTConnectPacket()
+	{}
+
+private:
+	std::string mProtocolName;
+	std::uint8_t mProtocolLevel;
+	std::uint8_t mConnectFlags;
+	std::uint16_t mKeepAlive;
+	std::size_t mClientIDLength;
+	std::string mClientID;
+
+	bool ValidateConnectFlags()
+	{
+		return (mConnectFlags & (1));
+	}
+
+	bool IsCleanSessionRequest()
+	{
+		return (mConnectFlags & (1 << 1));
+	}
+
+	template<typename OStream>
+	friend OStream &operator<<(OStream& os, const MQTTConnectPacket& packet)
+	{
+		return os << packet.mProtocolName;
+	}
+};
+
+class MQTTPublishPacket
+{
+public:
+	//MQTTPublishPacket(const char* data)
+	//{}
+};
+
+class MQTTPacket
+{
+public:
+	MQTTPacket(const char* data)
+		: mFixedHeader(data)
+	{
+		//TODO Construct contents based on packet type in header
+		if(mFixedHeader.mType == MQTTPacketType::CONNECT)
+		{
+			mConnect = MQTTConnectPacket(data + 4);
+		}
+		else if(mFixedHeader.mType == MQTTPacketType::PUBLISH)
+		{
+			//mPublish = MQTTPublishPacket(data + 4);
+			mPublish = MQTTPublishPacket();
+		}
+	}
+
+	MQTTFixedHeader mFixedHeader;
+	//std::variant<MQTTConnectPacket> mContents;
+	MQTTConnectPacket mConnect;
+	MQTTPublishPacket mPublish;
 };
 
 class MQTTBroker : public Common::IStreamSocketHandler
@@ -83,47 +191,55 @@ private:
 
 	void OnIncomingData(Common::StreamSocket* conn, char* data, size_t len) final
 	{
-		mLogger->info("Fixed incoming header: ");
-		mLogger->info("	Remaining length: {0:x}", data[1]);
-		if(static_cast<MQTTPacketType>(data[0] >> 4) == MQTTPacketType::CONNECT)
-		{
-			mLogger->info("Incoming connect packet");
-			mLogger->info("	Protocol name: {}", std::string(data + 4, 4));
-			mLogger->info("	Protocol level: {:#04x}", data[8]);
-			if(data[8] == 0x04)
-			{
-				mLogger->info("	Version = 3.1.1");
-			}
-			if(!(data[9] & (1)))
-			{
-				mLogger->info("	Valid conenct flags");
-			}
-			mLogger->info("	Connect flags: {0:#010b}", data[9]);
-			if(data[9] & (1 << 1))
-			{
-				mLogger->info("	Connection request wants clean session");
-			}
-			mLogger->info("	Keep alive: {0:#04x} or {0:d} seconds", (data[10] << 8 | (data[11] & 0xFF)));
-			mLogger->info("	Client-ID length: {}", (data[12] << 8 | (data[13] & 0xFF)));
-			mLogger->info("	Incoming Client-id: {}", std::string(data + 14));
+		MQTTPacket incomingPacket(data);
 
-			mLogger->info("Sending CONNACK");
-			const char connack[] = {(static_cast<uint8_t>(MQTTPacketType::CONNACK) << 4), 2, 0, 0};
-			conn->Send(connack, sizeof(connack));
-		}
-		else if(static_cast<MQTTPacketType>(data[0] >> 4) == MQTTPacketType::PUBLISH)
+		switch(incomingPacket.mFixedHeader.mType)
 		{
-			mLogger->info("Incoming publish packet");
-			mLogger->info("	Fixed header flags: {0:#010b}", static_cast<uint8_t>(data[0] & 0x00FF));
-			mLogger->info("	Payload length: {:d} {:#04x}:{:#04x}", (data[2] << 8 | (data[3] & 0xFF)), data[2], data[3]);
-			mLogger->info("	Topic name: {}", std::string(data + 4, (data[2] << 8 | (data[3] & 0xFF))));
-			mLogger->info("	Topic payload: {}", std::string(data + (data[2] << 8 | (data[3] & 0xFF)) + 4, data[1] - (data[2] << 8 | (data[3] & 0xFF))));
+			case MQTTPacketType::CONNECT:
+			{
+				mLogger->info("Incoming connect packet");
+
+				mLogger->info("Sending CONNACK");
+				const char connack[] = {(static_cast<uint8_t>(MQTTPacketType::CONNACK) << 4), 2, 0, 0};
+				conn->Send(connack, sizeof(connack));
+				break;
+			}
+
+			case MQTTPacketType::PUBLISH:
+			{
+				mLogger->info("Incoming publish packet");
+				mLogger->info("	Fixed header flags: {0:#010b}", static_cast<uint8_t>(data[0] & 0x00FF));
+				mLogger->info("	Payload length: {:d} {:#04x}:{:#04x}", (data[2] << 8 | (data[3] & 0xFF)), data[2], data[3]);
+				mLogger->info("	Topic name: {}", std::string(data + 4, (data[2] << 8 | (data[3] & 0xFF))));
+				mLogger->info("	Topic payload: {}", std::string(data + (data[2] << 8 | (data[3] & 0xFF)) + 4, data[1] - (data[2] << 8 | (data[3] & 0xFF))));
+				break;
+			}
 		}
-		else
-		{
-			mLogger->info("Unknown type, dumping packet");
-			mLogger->info("{}", std::string(data + 2, len - 2));
-		}
+
+
+		//std::visit(overloaded {
+		//		[](MQTTPacketType::CONNECT arg) {
+		//		},
+		//		[](MQTTPacketType::PUBLISH arg) {
+		//		},
+		//		[](auto arg) {
+		//			mLogger->error("Unknown incoming packet");
+		//		},
+		//	}, incomingPacket.mFixedHeader.mType);
+
+		//mLogger->info("Fixed incoming header: ");
+		//mLogger->info("	Remaining length: {0:x}", data[1]);
+		//if(static_cast<MQTTPacketType>(data[0] >> 4) == MQTTPacketType::CONNECT)
+		//{
+		//}
+		//else if(static_cast<MQTTPacketType>(data[0] >> 4) == MQTTPacketType::PUBLISH)
+		//{
+		//}
+		//else
+		//{
+		//	mLogger->info("Unknown type, dumping packet");
+		//	mLogger->info("{}", std::string(data + 2, len - 2));
+		//}
 		//mLogger->info("Incoming: {}", std::string{data});
 		//conn->Send(data, len);
 		//mEv.SheduleForNextCycle([this](){OnNextCycle();});
