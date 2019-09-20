@@ -107,6 +107,12 @@ public:
 	MQTTConnectPacket()
 	{}
 
+	bool IsCleanSessionRequest() const
+	{
+		return (mConnectFlags & (1 << 1));
+	}
+
+
 private:
 	std::string mProtocolName;
 	std::uint8_t mProtocolLevel;
@@ -118,11 +124,6 @@ private:
 	bool ValidateConnectFlags()
 	{
 		return (mConnectFlags & (1));
-	}
-
-	bool IsCleanSessionRequest()
-	{
-		return (mConnectFlags & (1 << 1));
 	}
 
 	template<typename OStream>
@@ -211,11 +212,11 @@ private:
 		{
 			case MQTTPacketType::CONNECT:
 			{
-				mLogger->info("Incoming connect packet");
-
 				mLogger->info("Sending CONNACK");
-				const char connack[] = {(static_cast<uint8_t>(MQTTPacketType::CONNACK) << 4), 2, 0, 0};
-				conn->Send(connack, sizeof(connack));
+
+				SendConnack(incomingPacket.mConnect, conn);
+
+				mClientConnections.push_back(conn);
 				break;
 			}
 
@@ -256,6 +257,26 @@ private:
 		//mEv.SheduleForNextCycle([this](){OnNextCycle();});
 	}
 
+	void SendConnack(const MQTTConnectPacket& incConn, Common::StreamSocket* conn)
+	{
+		const char connack[] = {(static_cast<uint8_t>(MQTTPacketType::CONNACK) << 4), 2, 0, 0};
+		//MQTT 3.2.2.2
+		if(!incConn.IsCleanSessionRequest())
+		{
+			if(std::find(std::begin(mClientConnections),
+										 std::end(mClientConnections), conn) != std::end(mClientConnections))
+			{
+				mLogger->warn("Existing client id found, but stored session is not yet supported");
+			}
+			else
+			{
+				mLogger->info("Existing client session not found, setting SP to 0");
+			}
+		}
+
+		conn->Send(connack, sizeof(connack));
+	}
+
 	Common::IStreamSocketHandler* OnIncomingConnection() final
 	{
 		return this;
@@ -263,7 +284,7 @@ private:
 
 	EventLoop::EventLoop& mEv;
 	Common::StreamSocketServer mMQTTServer;
-	//std::vector<Common::StreamSocket> mClientConnections;
+	std::vector<Common::StreamSocket*> mClientConnections;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
