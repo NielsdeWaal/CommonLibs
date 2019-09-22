@@ -75,16 +75,30 @@ enum MQTTPacketType
 	DISCONNECT = 14,
 };
 
+enum MQTTQoSType
+{
+	ONE = 1,
+	TWO = 2,
+	THREE = 3,
+};
+
 class MQTTFixedHeader
 {
 public:
 	MQTTFixedHeader(const char* data)
-		: mType(static_cast<MQTTPacketType>(*data >> 4))
+		: mType(static_cast<MQTTPacketType>(static_cast<uint8_t>(*data) >> 4))
 		, mRemainingLength(data[1])
-	{}
+	{
+		spdlog::get("MQTTBroker")->info("Fixed header type: {0:#010b}", (*data >> 4));
+	}
 
 	MQTTFixedHeader()
 	{}
+
+	std::size_t GetSize() const noexcept
+	{
+		return mRemainingLength;
+	}
 
 	MQTTPacketType mType;
 private:
@@ -107,11 +121,15 @@ public:
 	MQTTConnectPacket()
 	{}
 
-	bool IsCleanSessionRequest() const
+	bool IsCleanSessionRequest() const noexcept
 	{
 		return (mConnectFlags & (1 << 1));
 	}
 
+	std::string GetClientID() const noexcept
+	{
+		return mClientID;
+	}
 
 private:
 	std::string mProtocolName;
@@ -136,9 +154,9 @@ private:
 class MQTTPublishPacket
 {
 public:
-	MQTTPublishPacket(const char* data, size_t len)
-		: mTopicName(data, len)
-		, mTopicPayload(data + len)
+	MQTTPublishPacket(const char* data, size_t topicLen, size_t payloadLen)
+		: mTopicName(data, topicLen)
+		, mTopicPayload(data + topicLen, payloadLen - 2)
 	{}
 
 	MQTTPublishPacket()
@@ -147,6 +165,50 @@ public:
 //private:
 	std::string mTopicName;
 	std::string mTopicPayload;
+};
+
+class MQTTDisconnectPacket
+{
+public:
+	MQTTDisconnectPacket(const char* data)
+	{
+		if(data[0] != ((static_cast<uint8_t>(MQTTPacketType::DISCONNECT) << 4) & 0xF0))
+		{
+			mValidDisconnect = false;
+		}
+	}
+
+	MQTTDisconnectPacket()
+	{}
+
+	bool IsPacketValid() const noexcept
+	{
+		return mValidDisconnect;
+	}
+
+private:
+	bool mValidDisconnect = true;
+};
+
+//TODO Support multiple topics from a single sub packet
+class MQTTSubscribePacket
+{
+public:
+	MQTTSubscribePacket()
+	{}
+
+	MQTTSubscribePacket(const char* data)
+		: mPacketIdentifier(data[0] << 8 | data[1])
+		, mTopicLength(data[2] << 8 | data[3])
+		, mTopicFilter(data + 4 , mTopicLength)
+	{}
+
+	std::uint16_t mPacketIdentifier;
+	std::size_t mTopicLength;
+	std::string mTopicFilter;
+
+private:
+	std::string mRest;
 };
 
 class MQTTPacket
@@ -162,7 +224,15 @@ public:
 		}
 		else if(mFixedHeader.mType == MQTTPacketType::PUBLISH)
 		{
-			mPublish = MQTTPublishPacket(data + 4, (data[2] << 8 | (data[3] & 0xFF)));
+			mPublish = MQTTPublishPacket(data + 4, (data[2] << 8 | (data[3] & 0xFF)), mFixedHeader.GetSize() - (data[2] << 8 | (data[3] & 0xFF)));
+		}
+		else if(mFixedHeader.mType == MQTTPacketType::DISCONNECT)
+		{
+			mDisconnect = MQTTDisconnectPacket(data);
+		}
+		else if(mFixedHeader.mType == MQTTPacketType::SUBSCRIBE)
+		{
+			mSubscribe = MQTTSubscribePacket(data + 2);
 		}
 	}
 
@@ -170,6 +240,8 @@ public:
 	//std::variant<MQTTConnectPacket> mContents;
 	MQTTConnectPacket mConnect;
 	MQTTPublishPacket mPublish;
+	MQTTDisconnectPacket mDisconnect;
+	MQTTSubscribePacket mSubscribe;
 };
 
 class MQTTBroker : public Common::IStreamSocketHandler
@@ -208,6 +280,8 @@ private:
 	{
 		MQTTPacket incomingPacket(data);
 
+		mLogger->info("Incoming packet");
+
 		switch(incomingPacket.mFixedHeader.mType)
 		{
 			case MQTTPacketType::CONNECT:
@@ -216,7 +290,8 @@ private:
 
 				SendConnack(incomingPacket.mConnect, conn);
 
-				mClientConnections.push_back(conn);
+				//mClientConnections.push_back(conn);
+				mClientConnections.insert({incomingPacket.mConnect.GetClientID(), conn});
 				break;
 			}
 
@@ -225,6 +300,40 @@ private:
 				mLogger->info("Incoming publish:");
 				mLogger->info("	topic: {}", incomingPacket.mPublish.mTopicName);
 				mLogger->info("	payload: {}", incomingPacket.mPublish.mTopicPayload);
+				break;
+			}
+
+			case MQTTPacketType::DISCONNECT:
+			{
+				mLogger->info("Incoming disconnect");
+				mLogger->info("Removing client");
+
+				for(auto it = mClientConnections.begin(); it != mClientConnections.end(); ) {
+					if(it->second == conn)
+						it = mClientConnections.erase(it);
+					else
+						++it;
+				}
+
+				break;
+			}
+
+			case MQTTPacketType::SUBSCRIBE:
+			{
+				mLogger->info("Incoming Subscribe:");
+				mLogger->info("	Packet identifier: {}", incomingPacket.mSubscribe.mPacketIdentifier);
+				mLogger->info("	Topic length: {}", incomingPacket.mSubscribe.mTopicLength);
+				mLogger->info("	Topic filter: {}", incomingPacket.mSubscribe.mTopicFilter);
+
+				SendSuback(incomingPacket.mSubscribe, conn);
+
+				break;
+			}
+
+			default:
+			{
+				mLogger->warn("Unhandled packet type!!!");
+				mLogger->info("	Type: {0:#010b}", (data[0] >> 4));
 				break;
 			}
 		}
@@ -263,8 +372,10 @@ private:
 		//MQTT 3.2.2.2
 		if(!incConn.IsCleanSessionRequest())
 		{
-			if(std::find(std::begin(mClientConnections),
-										 std::end(mClientConnections), conn) != std::end(mClientConnections))
+			//if(std::find(std::begin(mClientConnections),
+			//						  std::end(mClientConnections), conn) != std::end(mClientConnections))
+			const auto clientID = mClientConnections.find(incConn.GetClientID());
+			if(clientID != mClientConnections.end())
 			{
 				mLogger->warn("Existing client id found, but stored session is not yet supported");
 			}
@@ -277,6 +388,19 @@ private:
 		conn->Send(connack, sizeof(connack));
 	}
 
+	void SendSuback(const MQTTSubscribePacket& subPacket, Common::StreamSocket* conn)
+	{
+		const char suback[] = //{static_cast<char>((static_cast<uint8_t>(MQTTPacketType::SUBACK) << 4)),
+			{static_cast<char>(0b10010000),
+			5,
+			static_cast<char>((subPacket.mPacketIdentifier >> 8)),
+			static_cast<char>((subPacket.mPacketIdentifier & 0xFF)),
+			0};
+		mLogger->info("Sending suback: {:#04x} {:#04x} {:#04x} {:#04x} {:#04x}", suback[0], suback[1], suback[2], suback[3], suback[4]);
+		mLogger->info("Sending suback: {:#010b} {:#010b} {:#010b} {:#010b} {:#010b}", suback[0], suback[1], suback[2], suback[3], suback[4]);
+		conn->Send(suback, sizeof(suback));
+	}
+
 	Common::IStreamSocketHandler* OnIncomingConnection() final
 	{
 		return this;
@@ -284,7 +408,8 @@ private:
 
 	EventLoop::EventLoop& mEv;
 	Common::StreamSocketServer mMQTTServer;
-	std::vector<Common::StreamSocket*> mClientConnections;
+	//std::vector<Common::StreamSocket*> mClientConnections;
+	std::unordered_map<std::string, Common::StreamSocket*> mClientConnections;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
