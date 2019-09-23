@@ -10,54 +10,6 @@
 
 namespace MQTTBroker {
 
-//mLogger->info("	Protocol name: {}", std::string(data + 4, 4));
-//mLogger->info("	Protocol level: {:#04x}", data[8]);
-//if(data[8] == 0x04)
-//{
-//	mLogger->info("	Version = 3.1.1");
-//}
-//if(!(data[9] & (1)))
-//{
-//	mLogger->info("	Valid conenct flags");
-//}
-//mLogger->info("	Connect flags: {0:#010b}", data[9]);
-//if(data[9] & (1 << 1))
-//{
-//	mLogger->info("	Connection request wants clean session");
-//}
-//mLogger->info("	Keep alive: {0:#04x} or {0:d} seconds", (data[10] << 8 | (data[11] & 0xFF)));
-//mLogger->info("	Client-ID length: {}", (data[12] << 8 | (data[13] & 0xFF)));
-//mLogger->info("	Incoming Client-id: {}", std::string(data + 14));
-
-//mLogger->info("Incoming publish packet");
-//mLogger->info("	Fixed header flags: {0:#010b}", static_cast<uint8_t>(data[0] & 0x00FF));
-//mLogger->info("	Payload length: {:d} {:#04x}:{:#04x}", (data[2] << 8 | (data[3] & 0xFF)), data[2], data[3]);
-//mLogger->info("	Topic name: {}", std::string(data + 4, (data[2] << 8 | (data[3] & 0xFF))));
-//mLogger->info("	Topic payload: {}", std::string(data + (data[2] << 8 | (data[3] & 0xFF)) + 4, data[1] - (data[2] << 8 | (data[3] & 0xFF))));
-
-// https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718022
-//enum MQTTFlag
-//{
-//	CONNECT = 0,
-//	CONNACK = 0,
-//	PUBLISH = 0,
-//	PUBACK = 0,
-//	PUBREC = 0,
-//	PUBREL = b'0010,
-//	PUBCOMP = 7,
-//	SUBSCRIBE = 8,
-//	SUBACK = 9,
-//	UNSUBSCRIBE = 10,
-//	UNSUBACK = 11,
-//	PINGREQ = 12,
-//	PINGRESP = 13,
-//	DISCONNECT = 14,
-//};
-
-//Helper for packet type visitor
-//template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
-//template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
-
 enum MQTTPacketType
 {
 	CONNECT = 1,
@@ -326,7 +278,6 @@ private:
 				mLogger->info("	Sending CONNACK");
 				SendConnack(incomingPacket.mConnect, conn);
 
-				//mClientConnections.push_back(conn);
 				mClientConnections.insert({incomingPacket.mConnect.GetClientID(), conn});
 				break;
 			}
@@ -393,43 +344,6 @@ private:
 				break;
 			}
 		}
-
-		/*
-		for(const auto& topic : mPubQueue)
-		{
-			for(const auto& client : mPubClients[topic.first])
-			{
-				client.second->Send(
-			}
-		}
-		*/
-
-		//std::visit(overloaded {
-		//		[](MQTTPacketType::CONNECT arg) {
-		//		},
-		//		[](MQTTPacketType::PUBLISH arg) {
-		//		},
-		//		[](auto arg) {
-		//			mLogger->error("Unknown incoming packet");
-		//		},
-		//	}, incomingPacket.mFixedHeader.mType);
-
-		//mLogger->info("Fixed incoming header: ");
-		//mLogger->info("	Remaining length: {0:x}", data[1]);
-		//if(static_cast<MQTTPacketType>(data[0] >> 4) == MQTTPacketType::CONNECT)
-		//{
-		//}
-		//else if(static_cast<MQTTPacketType>(data[0] >> 4) == MQTTPacketType::PUBLISH)
-		//{
-		//}
-		//else
-		//{
-		//	mLogger->info("Unknown type, dumping packet");
-		//	mLogger->info("{}", std::string(data + 2, len - 2));
-		//}
-		//mLogger->info("Incoming: {}", std::string{data});
-		//conn->Send(data, len);
-		//mEv.SheduleForNextCycle([this](){OnNextCycle();});
 	}
 
 	void SendConnack(const MQTTConnectPacket& incConn, Common::StreamSocket* conn)
@@ -438,8 +352,6 @@ private:
 		//MQTT 3.2.2.2
 		if(!incConn.IsCleanSessionRequest())
 		{
-			//if(std::find(std::begin(mClientConnections),
-			//						  std::end(mClientConnections), conn) != std::end(mClientConnections))
 			const auto clientID = mClientConnections.find(incConn.GetClientID());
 			if(clientID != mClientConnections.end())
 			{
