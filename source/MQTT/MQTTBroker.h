@@ -211,6 +211,20 @@ private:
 	std::string mRest;
 };
 
+class MQTTPingRequestPacket
+{
+public:
+	MQTTPingRequestPacket()
+	{}
+};
+
+class MQTTPingResponsePacket
+{
+public:
+	MQTTPingResponsePacket()
+	{}
+};
+
 class MQTTPacket
 {
 public:
@@ -234,6 +248,14 @@ public:
 		{
 			mSubscribe = MQTTSubscribePacket(data + 2);
 		}
+		else if(mFixedHeader.mType == MQTTPacketType::PINGREQ)
+		{
+			mPingRequest = MQTTPingRequestPacket();
+		}
+		else if(mFixedHeader.mType == MQTTPacketType::PINGRESP)
+		{
+			mPingResponse = MQTTPingResponsePacket();
+		}
 	}
 
 	MQTTFixedHeader mFixedHeader;
@@ -242,6 +264,8 @@ public:
 	MQTTPublishPacket mPublish;
 	MQTTDisconnectPacket mDisconnect;
 	MQTTSubscribePacket mSubscribe;
+	MQTTPingRequestPacket mPingRequest;
+	MQTTPingResponsePacket mPingResponse;
 };
 
 class MQTTBroker : public Common::IStreamSocketHandler
@@ -330,6 +354,14 @@ private:
 				break;
 			}
 
+			case MQTTPacketType::PINGREQ:
+			{
+				mLogger->info("Incoming ping request, sending response");
+
+				SendPingResponse(conn);
+				break;
+			}
+
 			default:
 			{
 				mLogger->warn("Unhandled packet type!!!");
@@ -390,15 +422,20 @@ private:
 
 	void SendSuback(const MQTTSubscribePacket& subPacket, Common::StreamSocket* conn)
 	{
-		const char suback[] = //{static_cast<char>((static_cast<uint8_t>(MQTTPacketType::SUBACK) << 4)),
-			{static_cast<char>(0b10010000),
-			5,
-			static_cast<char>((subPacket.mPacketIdentifier >> 8)),
-			static_cast<char>((subPacket.mPacketIdentifier & 0xFF)),
+		const uint8_t suback[] = {(static_cast<uint8_t>(MQTTPacketType::SUBACK) << 4),
+			3,
+			(subPacket.mPacketIdentifier >> 8),
+			(subPacket.mPacketIdentifier & 0xFF),
 			0};
 		mLogger->info("Sending suback: {:#04x} {:#04x} {:#04x} {:#04x} {:#04x}", suback[0], suback[1], suback[2], suback[3], suback[4]);
 		mLogger->info("Sending suback: {:#010b} {:#010b} {:#010b} {:#010b} {:#010b}", suback[0], suback[1], suback[2], suback[3], suback[4]);
 		conn->Send(suback, sizeof(suback));
+	}
+
+	void SendPingResponse(Common::StreamSocket* conn)
+	{
+		const uint8_t pingResp[] = {static_cast<uint8_t>(MQTTPacketType::PINGRESP) << 4, 0};
+		conn->Send(pingResp, sizeof(pingResp));
 	}
 
 	Common::IStreamSocketHandler* OnIncomingConnection() final
