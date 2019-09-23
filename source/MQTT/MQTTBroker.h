@@ -1,6 +1,7 @@
 #ifndef MQTT_BROKER_H
 #define MQTT_BROKER_H
 
+#include <deque>
 #include <variant>
 
 #include <spdlog/fmt/ostr.h>
@@ -295,9 +296,18 @@ private:
 		mLogger->info("Connection to client established");
 	}
 
-	void OnDisconnect() final
+	void OnDisconnect(Common::StreamSocket* conn) final
 	{
 		mLogger->info("Connection with client terminated");
+		for(auto& client : mPubClients)
+		{
+			for(auto it = client.second.begin(); it != client.second.end(); ) {
+				if(*it == conn)
+					it = client.second.erase(it);
+				else
+					++it;
+			}
+		}
 	}
 
 	void OnIncomingData(Common::StreamSocket* conn, char* data, size_t len) final
@@ -310,8 +320,10 @@ private:
 		{
 			case MQTTPacketType::CONNECT:
 			{
-				mLogger->info("Sending CONNACK");
+				mLogger->info("Incoming connect");
+				mLogger->info("	Client identifier: {}", incomingPacket.mConnect.GetClientID());
 
+				mLogger->info("	Sending CONNACK");
 				SendConnack(incomingPacket.mConnect, conn);
 
 				//mClientConnections.push_back(conn);
@@ -324,6 +336,16 @@ private:
 				mLogger->info("Incoming publish:");
 				mLogger->info("	topic: {}", incomingPacket.mPublish.mTopicName);
 				mLogger->info("	payload: {}", incomingPacket.mPublish.mTopicPayload);
+
+				//mPubQueue[incomingPacket.mPublish.mTopicName].push_back(incomingPacket.mPublish.mTopicPayload);
+
+				const auto& clients = mPubClients[incomingPacket.mPublish.mTopicName];
+
+				for(const auto& client : clients)
+				{
+					client->Send(data, len);
+				}
+
 				break;
 			}
 
@@ -349,6 +371,8 @@ private:
 				mLogger->info("	Topic length: {}", incomingPacket.mSubscribe.mTopicLength);
 				mLogger->info("	Topic filter: {}", incomingPacket.mSubscribe.mTopicFilter);
 
+				mPubClients[incomingPacket.mSubscribe.mTopicFilter].push_back(conn);
+
 				SendSuback(incomingPacket.mSubscribe, conn);
 
 				break;
@@ -369,6 +393,16 @@ private:
 				break;
 			}
 		}
+
+		/*
+		for(const auto& topic : mPubQueue)
+		{
+			for(const auto& client : mPubClients[topic.first])
+			{
+				client.second->Send(
+			}
+		}
+		*/
 
 		//std::visit(overloaded {
 		//		[](MQTTPacketType::CONNECT arg) {
@@ -424,8 +458,8 @@ private:
 	{
 		const uint8_t suback[] = {(static_cast<uint8_t>(MQTTPacketType::SUBACK) << 4),
 			3,
-			(subPacket.mPacketIdentifier >> 8),
-			(subPacket.mPacketIdentifier & 0xFF),
+			static_cast<uint8_t>((subPacket.mPacketIdentifier >> 8)),
+			static_cast<uint8_t>((subPacket.mPacketIdentifier & 0xFF)),
 			0};
 		mLogger->info("Sending suback: {:#04x} {:#04x} {:#04x} {:#04x} {:#04x}", suback[0], suback[1], suback[2], suback[3], suback[4]);
 		mLogger->info("Sending suback: {:#010b} {:#010b} {:#010b} {:#010b} {:#010b}", suback[0], suback[1], suback[2], suback[3], suback[4]);
@@ -447,6 +481,10 @@ private:
 	Common::StreamSocketServer mMQTTServer;
 	//std::vector<Common::StreamSocket*> mClientConnections;
 	std::unordered_map<std::string, Common::StreamSocket*> mClientConnections;
+	std::unordered_map<std::string, std::vector<Common::StreamSocket*>> mPubClients;
+	//[TOPIC]->QUEUEU<PAYLOAD>
+	//This means that there is no wildcard support yet.
+	std::unordered_map<std::string, std::deque<std::string>> mPubQueue;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
