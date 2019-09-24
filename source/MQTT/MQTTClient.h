@@ -11,7 +11,7 @@ class IMQTTClientHandler
 	virtual void OnDisconnect(MQTTClient* conn) = 0;
 	//virtual void OnIncomingData(MQTTClient* conn, char* data, size_t len) = 0;
 	virtual void OnPublish(const std::string& topic, const std::string& msg) = 0;
-	virtual ~IStreamSocketHandler() {}
+	virtual ~IMQTTClientHandler() {}
 };
 
 class MQTTClient
@@ -35,6 +35,9 @@ public:
 	{}
 
 	void Subscribe(const std::string& topic)
+	{}
+
+	void UnSubscribe(const std::string& topic)
 	{}
 
 	void Publish(const std::string& topic, const std::string& message)

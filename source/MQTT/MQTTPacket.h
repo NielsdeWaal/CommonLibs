@@ -28,6 +28,58 @@ enum MQTTQoSType
 	THREE = 3,
 };
 
+class MQTTHeaderOnlyPacket
+{
+public:
+	MQTTHeaderOnlyPacket(MQTTPacketType type, std::uint8_t flags)
+		: mMessage({static_cast<char>((static_cast<std::uint8_t>(type) | (flags & 0x0F))), 0})
+	{}
+
+private:
+	std::array<char, 2> mMessage;
+};
+
+class MQTTHeaderIdPacket
+{
+public:
+	MQTTHeaderIdPacket(MQTTPacketType type, std::uint8_t flags, std::uint16_t id)
+		: mMessage({static_cast<char>((static_cast<std::uint8_t>(type) | (flags & 0x0F))),
+				0,
+				static_cast<char>(id >> 8),
+				static_cast<char>(id & 0xFF)})
+	{}
+
+private:
+	std::array<char, 4> mMessage;
+};
+
+class MQTTConnackPacket
+{
+public:
+	MQTTConnackPacket(MQTTConnectPacket incConn, bool sessionPresent)
+		: mMessage({
+				static_cast<char>((static_cast<std::uint8_t>(MQTTPacketType::CONNACK) | 0 ))),
+				0b0010,
+				static_cast<char>(session_present ? 1 : 0),
+				//static_cast<char>(return_code)
+				0
+				})
+	{}
+
+	const char* GetMessage() const
+	{
+		return mMessage.data();
+	}
+
+	std::size_t GetSize() const
+	{
+		return mMessage.size();
+	}
+
+private:
+	std::array<char, 4> mMessage;
+};
+
 class MQTTFixedHeader
 {
 public:

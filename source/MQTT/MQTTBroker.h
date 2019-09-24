@@ -141,7 +141,7 @@ private:
 
 	void SendConnack(const MQTTConnectPacket& incConn, Common::StreamSocket* conn)
 	{
-		const char connack[] = {(static_cast<uint8_t>(MQTTPacketType::CONNACK) << 4), 2, 0, 0};
+		//const char connack[] = {(static_cast<uint8_t>(MQTTPacketType::CONNACK) << 4), 2, 0, 0};
 		//MQTT 3.2.2.2
 		if(!incConn.IsCleanSessionRequest())
 		{
@@ -155,8 +155,9 @@ private:
 				mLogger->info("Existing client session not found, setting SP to 0");
 			}
 		}
+		const auto connack = MQTTConnackPacket(incConn, incConn.IsCleanSessionRequest());
 
-		conn->Send(connack, sizeof(connack));
+		conn->Send(connack.GetMessage(), GetSize());
 	}
 
 	void SendSuback(const MQTTSubscribePacket& subPacket, Common::StreamSocket* conn)
