@@ -34,9 +34,7 @@ public:
 	MQTTFixedHeader(const char* data)
 		: mType(static_cast<MQTTPacketType>(static_cast<uint8_t>(*data) >> 4))
 		, mRemainingLength(data[1])
-	{
-		spdlog::get("MQTTBroker")->info("Fixed header type: {0:#010b}", (*data >> 4));
-	}
+	{}
 
 	MQTTFixedHeader()
 	{}
