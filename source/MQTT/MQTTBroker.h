@@ -25,7 +25,7 @@ public:
 		mLogger = spdlog::get("MQTTBroker");
 		if(mLogger == nullptr)
 		{
-			auto exampleAppLogger = spdlog::stdout_color_mt("MQTTBroker");
+			auto mqttclientlogger = spdlog::stdout_color_mt("MQTTBroker");
 			mLogger = spdlog::get("MQTTBroker");
 		}
 	}
