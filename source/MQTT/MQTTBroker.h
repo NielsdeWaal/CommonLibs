@@ -303,7 +303,7 @@ private:
 			case MQTTPacketType::DISCONNECT:
 			{
 				mLogger->info("Incoming disconnect");
-				mLogger->info("Removing client");
+				mLogger->info("	Removing client");
 
 				for(auto it = mClientConnections.begin(); it != mClientConnections.end(); ) {
 					if(it->second == conn)
