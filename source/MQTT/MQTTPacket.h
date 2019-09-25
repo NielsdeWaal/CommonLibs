@@ -107,6 +107,14 @@ public:
 		, mClientID(data + 10)
 	{}
 
+	MQTTConnectPacket(const std::uint16_t keepAlive,
+					const std::string clientId,
+					bool cleanSession)
+		: mKeepAlive(keepAlive)
+		, mClientID(clientId)
+		, mCleanSession(cleanSession)
+	{}
+
 	MQTTConnectPacket()
 	{}
 
@@ -120,6 +128,12 @@ public:
 		return mClientID;
 	}
 
+	const std::vector<char> GetMessage() const noexcept
+	{
+		std::vector<char> message;
+		message.push_back(static_cast<char>(MQTTPacketType::CONNECT) << 4
+	}
+
 private:
 	std::string mProtocolName;
 	std::uint8_t mProtocolLevel;
@@ -127,6 +141,7 @@ private:
 	std::uint16_t mKeepAlive;
 	std::size_t mClientIDLength;
 	std::string mClientID;
+	bool mCleanSession;
 
 	bool ValidateConnectFlags()
 	{
