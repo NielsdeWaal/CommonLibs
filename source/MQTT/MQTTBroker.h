@@ -141,7 +141,6 @@ private:
 
 	void SendConnack(const MQTTConnectPacket& incConn, Common::StreamSocket* conn)
 	{
-		//const char connack[] = {(static_cast<uint8_t>(MQTTPacketType::CONNACK) << 4), 2, 0, 0};
 		//MQTT 3.2.2.2
 		if(!incConn.IsCleanSessionRequest())
 		{
@@ -157,25 +156,19 @@ private:
 		}
 		const auto connack = MQTTConnackPacket(incConn, incConn.IsCleanSessionRequest());
 
-		conn->Send(connack.GetMessage(), GetSize());
+		conn->Send(connack.GetMessage(), connack.GetSize());
 	}
 
 	void SendSuback(const MQTTSubscribePacket& subPacket, Common::StreamSocket* conn)
 	{
-		const uint8_t suback[] = {(static_cast<uint8_t>(MQTTPacketType::SUBACK) << 4),
-			3,
-			static_cast<uint8_t>((subPacket.mPacketIdentifier >> 8)),
-			static_cast<uint8_t>((subPacket.mPacketIdentifier & 0xFF)),
-			0};
-		mLogger->info("Sending suback: {:#04x} {:#04x} {:#04x} {:#04x} {:#04x}", suback[0], suback[1], suback[2], suback[3], suback[4]);
-		mLogger->info("Sending suback: {:#010b} {:#010b} {:#010b} {:#010b} {:#010b}", suback[0], suback[1], suback[2], suback[3], suback[4]);
-		conn->Send(suback, sizeof(suback));
+		const auto suback = MQTTSubackPacket(subPacket.mPacketIdentifier, 0);
+		conn->Send(suback.GetMessage(), suback.GetSize());
 	}
 
 	void SendPingResponse(Common::StreamSocket* conn)
 	{
-		const uint8_t pingResp[] = {static_cast<uint8_t>(MQTTPacketType::PINGRESP) << 4, 0};
-		conn->Send(pingResp, sizeof(pingResp));
+		auto pingResp = MQTTPingResponsePacket();
+		conn->Send(pingResp.GetMessage(), pingResp.GetSize());
 	}
 
 	Common::IStreamSocketHandler* OnIncomingConnection() final

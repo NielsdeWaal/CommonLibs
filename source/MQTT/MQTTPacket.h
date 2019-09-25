@@ -32,8 +32,18 @@ class MQTTHeaderOnlyPacket
 {
 public:
 	MQTTHeaderOnlyPacket(MQTTPacketType type, std::uint8_t flags)
-		: mMessage({static_cast<char>((static_cast<std::uint8_t>(type) | (flags & 0x0F))), 0})
+		: mMessage({static_cast<char>((static_cast<std::uint8_t>(type) << 4 | (flags & 0x0F))), 0})
 	{}
+
+	const char* GetMessage() const
+	{
+		return mMessage.data();
+	}
+
+	constexpr std::size_t GetSize() const
+	{
+		return mMessage.size();
+	}
 
 private:
 	std::array<char, 2> mMessage;
@@ -43,27 +53,10 @@ class MQTTHeaderIdPacket
 {
 public:
 	MQTTHeaderIdPacket(MQTTPacketType type, std::uint8_t flags, std::uint16_t id)
-		: mMessage({static_cast<char>((static_cast<std::uint8_t>(type) | (flags & 0x0F))),
+		: mMessage({static_cast<char>((static_cast<std::uint8_t>(type) << 4 | (flags & 0x0F))),
 				0,
 				static_cast<char>(id >> 8),
 				static_cast<char>(id & 0xFF)})
-	{}
-
-private:
-	std::array<char, 4> mMessage;
-};
-
-class MQTTConnackPacket
-{
-public:
-	MQTTConnackPacket(MQTTConnectPacket incConn, bool sessionPresent)
-		: mMessage({
-				static_cast<char>((static_cast<std::uint8_t>(MQTTPacketType::CONNACK) | 0 ))),
-				0b0010,
-				static_cast<char>(session_present ? 1 : 0),
-				//static_cast<char>(return_code)
-				0
-				})
 	{}
 
 	const char* GetMessage() const
@@ -71,7 +64,7 @@ public:
 		return mMessage.data();
 	}
 
-	std::size_t GetSize() const
+	constexpr std::size_t GetSize() const
 	{
 		return mMessage.size();
 	}
@@ -139,12 +132,6 @@ private:
 	{
 		return (mConnectFlags & (1));
 	}
-
-	template<typename OStream>
-	friend OStream &operator<<(OStream& os, const MQTTConnectPacket& packet)
-	{
-		return os << packet.mProtocolName;
-	}
 };
 
 class MQTTPublishPacket
@@ -211,14 +198,70 @@ class MQTTPingRequestPacket
 {
 public:
 	MQTTPingRequestPacket()
+		: mPacket(MQTTPacketType::PINGREQ, 0)
 	{}
+
+	const char* GetMessage() const
+	{
+		return mPacket.GetMessage();
+	}
+
+	std::size_t GetSize() const
+	{
+		return mPacket.GetSize();
+	}
+
+private:
+	MQTTHeaderOnlyPacket mPacket;
 };
 
 class MQTTPingResponsePacket
 {
 public:
 	MQTTPingResponsePacket()
+		: mPacket(MQTTPacketType::PINGRESP, 0)
 	{}
+
+	const char* GetMessage() const
+	{
+		return mPacket.GetMessage();
+	}
+
+	std::size_t GetSize() const
+	{
+		return mPacket.GetSize();
+	}
+
+private:
+	MQTTHeaderOnlyPacket mPacket;
+};
+
+class MQTTSubackPacket
+{
+public:
+	MQTTSubackPacket(std::uint16_t packetId, std::uint8_t retCode)
+		: mMessage({
+				static_cast<char>((static_cast<std::uint8_t>(MQTTPacketType::SUBACK) << 4 | 0))
+				, 3
+				, static_cast<char>(packetId >> 8)
+				, static_cast<char>(packetId & 0xFF)
+				, static_cast<char>(retCode)
+				})
+	{}
+
+	const char* GetMessage() const
+	{
+		return mMessage.data();
+	}
+
+	constexpr std::size_t GetSize() const
+	{
+		return mMessage.size();
+	}
+
+private:
+	std::array<char, 5> mMessage;
+
 };
 
 class MQTTPacket
@@ -262,6 +305,33 @@ public:
 	MQTTSubscribePacket mSubscribe;
 	MQTTPingRequestPacket mPingRequest;
 	MQTTPingResponsePacket mPingResponse;
+};
+
+class MQTTConnackPacket
+{
+public:
+	MQTTConnackPacket(MQTTConnectPacket incConn, bool sessionPresent)
+		: mMessage({
+				static_cast<char>((static_cast<std::uint8_t>(MQTTPacketType::CONNACK) << 4 | 0 )),
+				0b0010,
+				static_cast<char>(sessionPresent ? 1 : 0),
+				//static_cast<char>(return_code)
+				0
+				})
+	{}
+
+	const char* GetMessage() const
+	{
+		return mMessage.data();
+	}
+
+	std::size_t GetSize() const
+	{
+		return mMessage.size();
+	}
+
+private:
+	std::array<char, 4> mMessage;
 };
 
 }
