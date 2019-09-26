@@ -52,6 +52,10 @@ public:
 		//mLogger->info("Got callback from timer");
 		//mSocket.Send(Teststring.c_str(), Teststring.size());
 		//mUDPClient.Send(Teststring.c_str(), Teststring.size(), "127.0.0.1", 9999);
+		if(mMQTTClient.IsConnected())
+		{
+			mMQTTClient.Publish("test/TestTopic", "TestMessageFromCommonLibs");
+		}
 	}
 
 	void OnNextCycle()
@@ -68,6 +72,7 @@ public:
 	{
 		mLogger->info("Connection succeeded");
 		mMQTTClient.Subscribe("test/TestTopic");
+		mMQTTClient.Subscribe("SCD30");
 	}
 
 	void OnDisconnect(MQTT::MQTTClient* conn) final
