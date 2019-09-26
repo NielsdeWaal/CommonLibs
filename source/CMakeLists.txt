@@ -47,6 +47,7 @@ add_executable(CommonLibs
 	Common/StreamSocket.h
 	Common/UDPSocket.h
 	MQTT/MQTTPacket.h
+	MQTT/MQTTClient.h
 	MQTT/MQTTBroker.h
 	Example.h
     main.cpp)
