@@ -131,7 +131,22 @@ public:
 	const std::vector<char> GetMessage() const noexcept
 	{
 		std::vector<char> message;
-		message.push_back(static_cast<char>(MQTTPacketType::CONNECT) << 4
+		message.push_back(static_cast<char>(MQTTPacketType::CONNECT) << 4);
+		message.push_back(static_cast<char>(12 + mClientID.size()));
+
+		message.insert(std::end(message), std::begin(mProtocolNameAndLevel), std::end(mProtocolNameAndLevel));
+
+		//TODO Implement flags for e.g will
+		message.push_back(2);
+
+		message.push_back(static_cast<char>(mKeepAlive >> 8));
+		message.push_back(static_cast<char>(mKeepAlive & 0x0F));
+
+		message.push_back(static_cast<char>(mClientID.size() >> 8));
+		message.push_back(static_cast<char>(mClientID.size() & 0x0F));
+		message.insert(std::end(message), std::begin(mClientID), std::end(mClientID));
+
+		return message;
 	}
 
 private:
@@ -142,6 +157,8 @@ private:
 	std::size_t mClientIDLength;
 	std::string mClientID;
 	bool mCleanSession;
+
+	std::vector<char> mProtocolNameAndLevel{0x00, 0x04, 'M', 'Q', 'T', 'T', 0x04};
 
 	bool ValidateConnectFlags()
 	{
@@ -200,6 +217,35 @@ public:
 		, mTopicLength(data[2] << 8 | data[3])
 		, mTopicFilter(data + 4 , mTopicLength)
 	{}
+
+	MQTTSubscribePacket(std::uint16_t packetID, const std::string& topic)
+		: mPacketIdentifier(packetID)
+		, mTopicFilter(topic)
+	{
+		mTopicLength = mTopicFilter.size();
+	}
+
+	const std::vector<char> GetMessage() const noexcept
+	{
+		std::vector<char> message;
+		message.push_back(static_cast<char>(MQTTPacketType::SUBSCRIBE) << 4 | 0b0000010);
+		message.push_back(static_cast<char>(2 + // var header
+											2 + mTopicLength + // size bytes + topic size
+											1 // QoS byte
+											));
+
+		message.push_back(static_cast<char>(mPacketIdentifier >> 8));
+		message.push_back(static_cast<char>(mPacketIdentifier & 0x0F));
+
+		message.push_back(static_cast<char>(mTopicLength >> 8));
+		message.push_back(static_cast<char>(mTopicLength & 0x0F));
+
+		message.insert(std::end(message), std::begin(mTopicFilter), std::end(mTopicFilter));
+
+		message.push_back(0);
+
+		return message;
+	}
 
 	std::uint16_t mPacketIdentifier;
 	std::size_t mTopicLength;
