@@ -2,11 +2,19 @@
 #define MQTTCLIENT_H
 
 #include "EventLoop.h"
+#include "StreamSocket.h"
+
+#include "MQTT/MQTTPacket.h"
+
+using namespace std::chrono_literals;
 
 namespace MQTT {
 
+class MQTTClient;
+
 class IMQTTClientHandler
 {
+public:
 	virtual void OnConnected() = 0;
 	virtual void OnDisconnect(MQTTClient* conn) = 0;
 	//virtual void OnIncomingData(MQTTClient* conn, char* data, size_t len) = 0;
@@ -14,11 +22,14 @@ class IMQTTClientHandler
 	virtual ~IMQTTClientHandler() {}
 };
 
-class MQTTClient
+class MQTTClient : public Common::IStreamSocketHandler
 {
 public:
-	MQTTClient(EventLoop::EventLoop& ev)
+	MQTTClient(EventLoop::EventLoop& ev, IMQTTClientHandler* handler)
 		: mEv(ev)
+		, mConnection(mEv, this)
+		, mHandler(handler)
+		, mKeepAliveTimer(10s, EventLoop::EventLoop::TimerType::Repeating, [this](){ KeepAlive(); })
 	{
 		mLogger = spdlog::get("MQTTClient");
 		if(mLogger == nullptr)
@@ -28,14 +39,34 @@ public:
 		}
 	}
 
-	void Connect(std::string hostname, const uint16_t port)
-	{}
+	~MQTTClient()
+	{
+		mConnection.Shutdown();
+	}
+
+	void Connect(const std::string& hostname, const uint16_t port)
+	{
+		mConnection.Connect(hostname.c_str(), port);
+	}
 
 	void Disconnect()
 	{}
 
 	void Subscribe(const std::string& topic)
-	{}
+	{
+		if(!mTCPConnected && !mMQTTConnected)
+		{
+			mLogger->error("Can't subscribe while not connected");
+			return;
+		}
+
+		const MQTTSubscribePacket subPacket(mPacketIdentifier, topic);
+		const auto packet = subPacket.GetMessage();
+
+		mConnection.Send(packet.data(), packet.size());
+
+		++mPacketIdentifier;
+	}
 
 	void UnSubscribe(const std::string& topic)
 	{}
@@ -43,8 +74,83 @@ public:
 	void Publish(const std::string& topic, const std::string& message)
 	{}
 
+	void OnConnected() final
+	{
+		mLogger->info("Connection succeeded");
+		mTCPConnected = true;
+
+		const MQTTConnectPacket connectPacket(60, "ClientID1", 1);
+		const auto packet = connectPacket.GetMessage();
+		mConnection.Send(packet.data(), packet.size());
+
+		mEv.AddTimer(&mKeepAliveTimer);
+	}
+
+	void OnDisconnect(Common::StreamSocket* conn) final
+	{
+		mLogger->warn("Connection terminated");
+	}
+
+	void OnIncomingData(Common::StreamSocket* conn, char* data, size_t len) final
+	{
+		MQTTPacket incomingPacket(data);
+
+		switch(incomingPacket.mFixedHeader.mType)
+		{
+			case MQTTPacketType::CONNACK:
+			{
+				mLogger->info("Incoming connack");
+				mMQTTConnected = true;
+				mHandler->OnConnected();
+				break;
+			}
+
+			case MQTTPacketType::PUBLISH:
+			{
+				mHandler->OnPublish(incomingPacket.mPublish.mTopicName, incomingPacket.mPublish.mTopicPayload);
+				break;
+			}
+
+			case MQTTPacketType::PINGRESP:
+			{
+				break;
+			}
+
+			case MQTTPacketType::SUBACK:
+			{
+				break;
+			}
+
+			default:
+			{
+				mLogger->warn("Unknown packet type");
+				break;
+			}
+
+		}
+
+	}
+
+	void KeepAlive()
+	{
+		if(mTCPConnected && mMQTTConnected)
+		{
+			const MQTTPingRequestPacket packet;
+			mConnection.Send(packet.GetMessage(), packet.GetSize());
+		}
+	}
+
 private:
 	EventLoop::EventLoop& mEv;
+	Common::StreamSocket mConnection;
+	IMQTTClientHandler* mHandler;
+
+	EventLoop::EventLoop::Timer mKeepAliveTimer;
+
+	bool mTCPConnected = false;
+	bool mMQTTConnected = false;
+
+	uint16_t mPacketIdentifier = 1;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
