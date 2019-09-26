@@ -1,6 +1,8 @@
 #ifndef STREAMSOCKET_H
 #define STREAMSOCKET_H
 
+#include <netinet/tcp.h>
+
 #include "EventLoop.h"
 
 namespace Common {
@@ -13,7 +15,7 @@ class IStreamSocketHandler
 {
 public:
 	virtual void OnConnected() = 0;
-	virtual void OnDisconnect() = 0;
+	virtual void OnDisconnect(StreamSocket* conn) = 0;
 	virtual void OnIncomingData(StreamSocket* conn, char* data, size_t len) = 0;
 	virtual ~IStreamSocketHandler() {}
 };
@@ -30,10 +32,22 @@ public:
 		: mEventLoop(ev)
 		, mHandler(handler)
 	{
-		auto streamSocketLogger = spdlog::stdout_color_mt("StreamSocket");
 		mLogger = spdlog::get("StreamSocket");
+		if(mLogger == nullptr)
+		{
+			auto streamSocketLogger = spdlog::stdout_color_mt("StreamSocket");
+			mLogger = spdlog::get("StreamSocket");
+		}
 
 		mFd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+
+		int nagleFlag = 1;
+		int result = setsockopt(mFd, IPPROTO_TCP, TCP_NODELAY, (char *) &nagleFlag, sizeof(int));
+		if(result < 0)
+		{
+			mLogger->critical("Setting TCP_NODELAY failed, errno: {}", errno);
+			throw std::runtime_error("Setting TCP_NODELAY failed");
+		}
 	}
 
 	StreamSocket(EventLoop::EventLoop& ev, int fd, IStreamSocketHandler* handler)
@@ -94,6 +108,19 @@ public:
 		}
 	}
 
+	void Send(const uint8_t* data, const size_t len) noexcept
+	{
+		if(mConnected)
+		{
+			::send(mFd, data, len, MSG_DONTWAIT);
+			mSendInProgress = true;
+		}
+		else
+		{
+			mLogger->warn("Attempted send on fd:{}, while not connected", mFd);
+		}
+	}
+
 	void Shutdown() noexcept
 	{
 		if(mConnected)
@@ -133,7 +160,7 @@ private:
 				else
 				{
 					mEventLoop.UnregisterFiledescriptor(mFd);
-					mHandler->OnDisconnect();
+					mHandler->OnDisconnect(this);
 					mConnected = false;
 				}
 			}
@@ -158,9 +185,11 @@ private:
 
 		if(len == 0)
 		{
-			mLogger->info("Socket has been disconnected, closing filedescriptor. fd:{}", fd);
+			//FIXME Under some circumstances the logger seems to get desctroyed before this call is done?
+			//Results in a seqfault on an atomic load
+			//mLogger->info("Socket has been disconnected, closing filedescriptor. fd:{}", fd);
 			mEventLoop.UnregisterFiledescriptor(mFd);
-			mHandler->OnDisconnect();
+			mHandler->OnDisconnect(this);
 			mConnected = false;
 			return;
 		}
