@@ -78,12 +78,12 @@ private:
 			case MQTTPacketType::PUBLISH:
 			{
 				mLogger->info("Incoming publish:");
-				mLogger->info("	topic: {}", incomingPacket.mPublish.mTopicName);
+				mLogger->info("	topic: {}", incomingPacket.mPublish.mTopicFilter);
 				mLogger->info("	payload: {}", incomingPacket.mPublish.mTopicPayload);
 
 				//mPubQueue[incomingPacket.mPublish.mTopicName].push_back(incomingPacket.mPublish.mTopicPayload);
 
-				const auto& clients = mPubClients[incomingPacket.mPublish.mTopicName];
+				const auto& clients = mPubClients[incomingPacket.mPublish.mTopicFilter];
 
 				for(const auto& client : clients)
 				{

@@ -41,7 +41,19 @@ public:
 
 	~MQTTClient()
 	{
-		mConnection.Shutdown();
+		if(mMQTTConnected)
+		{
+			Disconnect();
+		}
+		if(mTCPConnected)
+		{
+			mConnection.Shutdown();
+		}
+	}
+
+	const bool IsConnected() const noexcept
+	{
+		return (mTCPConnected && mMQTTConnected);
 	}
 
 	void Connect(const std::string& hostname, const uint16_t port)
@@ -50,7 +62,13 @@ public:
 	}
 
 	void Disconnect()
-	{}
+	{
+		const MQTTDisconnectPacket disconPacket;
+		const auto packet = disconPacket.GetMessage();
+
+		mConnection.Send(packet.data(), packet.size());
+		mMQTTConnected = false;
+	}
 
 	void Subscribe(const std::string& topic)
 	{
@@ -72,7 +90,20 @@ public:
 	{}
 
 	void Publish(const std::string& topic, const std::string& message)
-	{}
+	{
+		if(!mTCPConnected && !mMQTTConnected)
+		{
+			mLogger->error("Can't publish while not connected");
+			return;
+		}
+
+		const MQTTPublishPacket pubPacket(mPacketIdentifier, topic, message);
+		const auto packet = pubPacket.GetMessage();
+
+		mConnection.Send(packet.data(), packet.size());
+
+		//++mPacketIdentifier;
+	}
 
 	void OnConnected() final
 	{
@@ -107,7 +138,7 @@ public:
 
 			case MQTTPacketType::PUBLISH:
 			{
-				mHandler->OnPublish(incomingPacket.mPublish.mTopicName, incomingPacket.mPublish.mTopicPayload);
+				mHandler->OnPublish(incomingPacket.mPublish.mTopicFilter, incomingPacket.mPublish.mTopicPayload);
 				break;
 			}
 

@@ -169,17 +169,49 @@ private:
 class MQTTPublishPacket
 {
 public:
-	MQTTPublishPacket(const char* data, size_t topicLen, size_t payloadLen)
-		: mTopicName(data, topicLen)
-		, mTopicPayload(data + topicLen, payloadLen - 2)
-	{}
-
 	MQTTPublishPacket()
 	{}
 
+	MQTTPublishPacket(const char* data, size_t topicLen, size_t payloadLen)
+		: mTopicFilter(data, topicLen)
+		, mTopicPayload(data + topicLen, payloadLen - 2)
+	{}
+
+	MQTTPublishPacket(std::uint16_t packetID, const std::string& topic, const std::string& msg)
+		: mPacketIdentifier(packetID)
+		, mTopicFilter(topic)
+		, mTopicPayload(msg)
+	{}
+
+	const std::vector<char> GetMessage() const noexcept
+	{
+		std::vector<char> message;
+		message.push_back(static_cast<char>(MQTTPacketType::PUBLISH) << 4);
+
+		message.push_back(static_cast<char>(2 + // var header
+											mTopicFilter.size() + // size bytes + topic size
+											mTopicPayload.size() // QoS byte
+											));
+
+		message.push_back(static_cast<char>(mTopicFilter.size() >> 8));
+		message.push_back(static_cast<char>(mTopicFilter.size() & 0x0F));
+
+		message.insert(std::end(message), std::begin(mTopicFilter), std::end(mTopicFilter));
+
+		//message.push_back(static_cast<char>(mPacketIdentifier >> 8));
+		//message.push_back(static_cast<char>(mPacketIdentifier & 0x0F));
+
+		message.insert(std::end(message), std::begin(mTopicPayload), std::end(mTopicPayload));
+
+		message.push_back(0);
+
+		return message;
+	}
+
 //private:
-	std::string mTopicName;
+	std::string mTopicFilter;
 	std::string mTopicPayload;
+	std::uint16_t mPacketIdentifier;
 };
 
 class MQTTDisconnectPacket
@@ -195,6 +227,15 @@ public:
 
 	MQTTDisconnectPacket()
 	{}
+
+	const std::vector<char> GetMessage() const noexcept
+	{
+		std::vector<char> message;
+		message.push_back(static_cast<char>(MQTTPacketType::DISCONNECT) << 4);
+		message.push_back(0);
+
+		return message;
+	}
 
 	bool IsPacketValid() const noexcept
 	{
