@@ -39,6 +39,8 @@ public:
 		mSW.AddGroup("DEBUG", true);
 		mSW.AddFieldToGroup("DEBUG", "Debug1", [this](){ mDebugMeasurementCounter++; return mDebugMeasurementCounter;});
 		mSW.AddFieldToGroup("DEBUG", "Debug2", [this](){ mDebugMeasurementCounter1++; return mDebugMeasurementCounter1;});
+		mSW.AddGroup("TestGroup", true);
+		mSW.AddFieldToGroup("TestGroup", "Debug7", [this](){ mDebugMeasurementCounter++; return mDebugMeasurementCounter;});
 	}
 
 	~ExampleApp()
@@ -49,9 +51,11 @@ public:
 
 	void Initialise()
 	{
-		mEv.AddTimer(&mTimer);
-		mServer.BindAndListen(1337);
-		mSocket.Connect("127.0.0.1", 1337);
+		//mEv.AddTimer(&mTimer);
+		//mServer.BindAndListen(1337);
+		//mSocket.Connect("127.0.0.1", 1337);
+		mSW.InfluxConnector("127.0.0.1", 9555);
+		mSW.SetBatchWriting(5s);
 	}
 
 	void OnTimerCallback()
