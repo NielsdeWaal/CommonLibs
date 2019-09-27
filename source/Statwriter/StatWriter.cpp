@@ -16,7 +16,21 @@ void StatWriter::AddFieldToGroup(const std::string& group, const std::string& la
 }
 
 void StatWriter::WriteBatch()
-{ }
+{
+	mLogger->info("Writing batches to server");
+	for(const auto& batch : mBatchMeasurements)
+	{
+		InfluxDBLine line;
+		line.mTimestamp = std::chrono::high_resolution_clock::now();
+
+		line.mMeasurement = batch.first;
+		AddMeasurementsToLine(line, batch.first);
+		const auto data = line.GetLine();
+		mLogger->info("Sending {} to server", data);
+		mSocket.Send(data.c_str(), data.size(), mServerAddress.c_str(), mServerPort);
+		//mLogger->info("[DEBUG] {}", line);
+	}
+}
 
 void StatWriter::AddMeasurementsToLine(InfluxDBLine& line, const std::string& group)
 {

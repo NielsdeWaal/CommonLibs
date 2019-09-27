@@ -27,6 +27,7 @@ private:
 		std::string mTagSet = "";
 		std::string mFieldSet = "";
 		std::chrono::time_point<std::chrono::high_resolution_clock> mTimestamp;
+
 		template<typename OStream>
 		friend OStream &operator<<(OStream &os, const InfluxDBLine &l)
 		{
@@ -38,6 +39,22 @@ private:
 			{
 				return os << l.mMeasurement << " " << l.mFieldSet; // << " " << l.mTimestamp;
 			}
+		}
+
+		const std::string GetLine() const
+		{
+			std::string ret = "";
+
+			ret += mMeasurement;
+			ret += " ";
+			if(mTagSet.size() != 0)
+			{
+				ret += mTagSet;
+				ret += ",";
+			}
+			ret += mFieldSet;
+
+			return ret;
 		}
 	};
 
@@ -58,7 +75,9 @@ public:
 
 	void InfluxConnector(const std::string& addr, const uint16_t port) noexcept
 	{
-		mSocket.Connect(addr.c_str(), port);
+		//mSocket.Connect(addr.c_str(), port);
+		mServerAddress = addr;
+		mServerPort = port;
 	}
 
 	void SetBatchWriting(std::chrono::seconds interval) noexcept
@@ -107,9 +126,11 @@ private:
 	EventLoop::EventLoop& mEventLoop;
 	EventLoop::EventLoop::Timer mTimer;
 	std::chrono::seconds mBatchInterval;
-	bool mTimerSet;
+	bool mTimerSet = false;
 
 	Common::UDPSocket mSocket;
+	std::string mServerAddress;
+	std::uint16_t mServerPort;
 
 	//FIXME
 	//Current implementation doesn't provide ordering for metrics written in line messages.
