@@ -31,11 +31,11 @@ void StatWriter::AddMeasurementsToLine(InfluxDBLine& line, const std::string& gr
 
 void StatWriter::DebugLineMessages()
 {
-	InfluxDBLine line;
-	line.mTimestamp = std::chrono::high_resolution_clock::now();
-
 	for(const auto& batch : mBatchMeasurements)
 	{
+		InfluxDBLine line;
+		line.mTimestamp = std::chrono::high_resolution_clock::now();
+
 		line.mMeasurement = batch.first;
 		AddMeasurementsToLine(line, batch.first);
 		mLogger->info("[DEBUG] {}", line);
