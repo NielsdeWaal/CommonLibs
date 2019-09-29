@@ -7,8 +7,12 @@
 #include <UDPSocket.h>
 
 #include <chrono>
+#include <variant>
 
 namespace StatWriter {
+
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 using namespace std::string_literals;
 
@@ -116,12 +120,43 @@ public:
 	 *
 	 */
 	void AddGroup(const std::string& label, const bool batch);
-	void AddFieldToGroup(const std::string& group, const std::string& label, const std::function<int()> getter);
+	
+	/**
+	 * @brief Add field to group for reporting
+	 *
+	 * This function adds a getter to storage for usage when reporting values.
+	 *
+	 * @issue The issue with the current setup is that it only excepts integers returns.
+	 * This should be fixable with variants.
+	 */
+	void AddFieldToGroup(const std::string& group, const std::string& label, const std::function<std::variant<int,float>()> getter);
 	//void AddToBatch() noexcept
 
 private:
 	void WriteBatch();
-	void AddMeasurementsToLine(InfluxDBLine& line, const std::string& group);
+	//void StatWriter::AddMeasurementsToLine(InfluxDBLine& line, const std::string& group)
+	/**
+	 * @brief Retrieve fields from registered getter and add these to influx line
+	 *
+	 * @todo current implementation uses ugly loop for joining variables.
+	 * This should be replaced with an FMT (join?) function
+	 */
+	void AddMeasurementsToLine(InfluxDBLine& line, const std::string& group)
+	{
+		const auto& currentBatch = mBatchMeasurements[group];
+		for(const auto& metric : currentBatch)
+		{
+			std::string metricValue = "";
+			std::visit(overloaded {
+					[&metricValue](int arg) { metricValue = std::to_string(arg); },
+					[&metricValue](float arg) { metricValue = std::to_string(arg); },
+					}, metric.second());
+			//line.mFieldSet += metric.first + "=" + std::to_string(metric.second()) + ","s;
+			line.mFieldSet += metric.first + "=" + metricValue + ","s;
+		}
+
+		line.mFieldSet.pop_back();
+	}
 
 	EventLoop::EventLoop& mEventLoop;
 	EventLoop::EventLoop::Timer mTimer;
@@ -135,7 +170,7 @@ private:
 	//FIXME
 	//Current implementation doesn't provide ordering for metrics written in line messages.
 	//Is this undesireable? No clue
-	std::unordered_map<std::string, std::unordered_map<std::string, std::function<int()>>> mBatchMeasurements;
+	std::unordered_map<std::string, std::unordered_map<std::string, std::function<std::variant<int,float>()>>> mBatchMeasurements;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };

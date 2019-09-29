@@ -10,7 +10,9 @@ void StatWriter::AddGroup(const std::string& label, const bool batch)
 	}
 }
 
-void StatWriter::AddFieldToGroup(const std::string& group, const std::string& label, const std::function<int()> getter)
+void StatWriter::AddFieldToGroup(const std::string& group,
+	const std::string& label,
+	const std::function<std::variant<int,float>()> getter)
 {
 	mBatchMeasurements[group][label] = getter;
 }
@@ -30,17 +32,6 @@ void StatWriter::WriteBatch()
 		mSocket.Send(data.c_str(), data.size(), mServerAddress.c_str(), mServerPort);
 		//mLogger->info("[DEBUG] {}", line);
 	}
-}
-
-void StatWriter::AddMeasurementsToLine(InfluxDBLine& line, const std::string& group)
-{
-	const auto& currentBatch = mBatchMeasurements[group];
-	for(const auto& metric : currentBatch)
-	{
-		line.mFieldSet += metric.first + "=" + std::to_string(metric.second()) + ","s;
-	}
-
-	line.mFieldSet.pop_back();
 }
 
 void StatWriter::DebugLineMessages()
