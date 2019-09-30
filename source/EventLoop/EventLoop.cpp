@@ -7,8 +7,12 @@ EventLoop::EventLoop()
 	, mStatsTimer(1s, TimerType::Repeating, [this](){ PrintStatistics(); })
 	, mEpollFd(::epoll_create1(EPOLL_CLOEXEC))
 {
-	const auto eventloopLogger = spdlog::stdout_color_mt("EventLoop");
 	mLogger = spdlog::get("EventLoop");
+	if(mLogger == nullptr)
+	{
+		const auto eventloopLogger = spdlog::stdout_color_mt("EventLoop");
+		mLogger = spdlog::get("EventLoop");
+	}
 
 	if(mEpollFd < 0)
 	{

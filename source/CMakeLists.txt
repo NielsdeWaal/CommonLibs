@@ -41,7 +41,7 @@ find_package (Threads REQUIRED) #threading
 # CommonLibs executable setup
 
 add_executable(CommonLibs
-    ${CMAKE_CURRENT_BINARY_DIR}/version.cpp
+	${CMAKE_CURRENT_BINARY_DIR}/version.cpp
 	EventLoop/EventLoop.cpp
 	EventLoop/EventLoop.h
 	Common/StreamSocket.h
@@ -49,6 +49,8 @@ add_executable(CommonLibs
 	MQTT/MQTTPacket.h
 	MQTT/MQTTClient.h
 	MQTT/MQTTBroker.h
+	Statwriter/StatWriter.h
+	Statwriter/StatWriter.cpp
 	Example.h
     main.cpp)
 add_dependencies(CommonLibs versionFileTouchForRebuild) # We want precise time of build in version
