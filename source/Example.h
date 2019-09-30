@@ -63,7 +63,6 @@ public:
 		//mLogger->info("Got callback from timer");
 		//mSocket.Send(Teststring.c_str(), Teststring.size());
 		//mUDPClient.Send(Teststring.c_str(), Teststring.size(), "127.0.0.1", 9999);
-		mSW.DebugLineMessages();
 	}
 
 	void OnNextCycle()
