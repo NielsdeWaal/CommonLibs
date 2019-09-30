@@ -37,10 +37,10 @@ public:
 		//mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
 
 		mSW.AddGroup("DEBUG", true);
-		mSW.AddFieldToGroup("DEBUG", "Debug1", [this](){ mDebugMeasurementCounter++; return mDebugMeasurementCounter;});
-		mSW.AddFieldToGroup("DEBUG", "Debug2", [this](){ mDebugMeasurementCounter1++; return mDebugMeasurementCounter1;});
-		mSW.AddGroup("TestGroup", true);
-		mSW.AddFieldToGroup("TestGroup", "Debug7", [this](){ mDebugMeasurementCounter++; return mDebugMeasurementCounter;});
+		mSW.AddFieldToGroup("DEBUG", "Debug1", [this]() -> float { mDebugMeasurementCounter++; return mDebugMeasurementCounter;});
+		mSW.AddFieldToGroup("DEBUG", "Debug2", [this]() -> int { mDebugMeasurementCounter1++; return mDebugMeasurementCounter1;});
+		//mSW.AddGroup("TestGroup", true);
+		//mSW.AddFieldToGroup("TestGroup", "Debug7", [this](){ mDebugMeasurementCounter++; return mDebugMeasurementCounter;});
 	}
 
 	~ExampleApp()
@@ -112,7 +112,7 @@ private:
 	std::string Teststring{"Test string"};
 
 	StatWriter::StatWriter mSW;
-	int mDebugMeasurementCounter = 0;
+	float mDebugMeasurementCounter = 0;
 	int mDebugMeasurementCounter1 = 8;
 
 	std::shared_ptr<spdlog::logger> mLogger;
