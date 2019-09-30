@@ -30,8 +30,12 @@ public:
 		: mEventLoop(ev)
 		, mHandler(handler)
 	{
-		auto streamSocketLogger = spdlog::stdout_color_mt("StreamSocket");
 		mLogger = spdlog::get("StreamSocket");
+		if(mLogger == nullptr)
+		{
+			auto streamSocketLogger = spdlog::stdout_color_mt("StreamSocket");
+			mLogger = spdlog::get("StreamSocket");
+		}
 
 		mFd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 	}

@@ -1,9 +1,15 @@
 #ifndef UDPSOCKET_H
 #define UDPSOCKET_H
 
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+
 #include "EventLoop.h"
 
 namespace Common {
+
+using namespace EventLoop;
 
 /**
  * Afer socket has been created, we can send data.
@@ -31,8 +37,12 @@ public:
 		, mHandler(handler)
 		, mFd(::socket(AF_INET, SOCK_DGRAM, 0))
 	{
-		auto streamSocketLogger = spdlog::stdout_color_mt("UDPSocket");
 		mLogger = spdlog::get("UDPSocket");
+		if(mLogger == nullptr)
+		{
+			auto UDPSocketLogger = spdlog::stdout_color_mt("UDPSocket");
+			mLogger = spdlog::get("UDPSocket");
+		}
 
 		fcntl(mFd, F_SETFL, O_NONBLOCK);
 	}

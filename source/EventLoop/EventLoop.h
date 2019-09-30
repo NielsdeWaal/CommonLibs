@@ -69,6 +69,7 @@ public:
 		Active = 1
 	};
 
+	//TODO Be able to update timer
 	struct Timer
 	{
 		using TimePoint = std::chrono::high_resolution_clock::time_point;
@@ -107,6 +108,7 @@ public:
 		std::function<void()> mCallback;
 	};
 
+	//TODO Add RemoveTimer function
 	void AddTimer(Timer* timer);
 
 	enum class LatencyType : std::uint8_t {

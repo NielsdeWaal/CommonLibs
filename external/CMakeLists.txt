@@ -68,4 +68,7 @@ ExternalHeaderOnly_Add(spdlog
 # # Make headers come as SYSTEM, to get rid of all warning on included headers
 # target_include_directories(cpr SYSTEM PUBLIC ${CPR_INCLUDE_DIRS} ${CURL_INCLUDE_DIRS})
 
-
+#-----------------------------------------------------------------------------
+# TOML Lib
+ExternalHeaderOnly_Add(cpptoml
+    "https://github.com/skystrife/cpptoml.git" "origin/master" "include")
