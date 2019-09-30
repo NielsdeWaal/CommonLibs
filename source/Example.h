@@ -11,6 +11,8 @@
 #include "StreamSocket.h"
 #include "UDPSocket.h"
 
+#include "Statwriter/StatWriter.h"
+
 using namespace std::chrono_literals;
 
 class ExampleApp : public EventLoop::IEventLoopCallbackHandler
@@ -27,10 +29,21 @@ public:
 		//, mServer(mEv, this)
 		//, mUDPClient(mEv, this)
 		, mMQTTClient(mEv, this)
+		, mSW(mEv)
 	{
-		auto eventloopLogger = spdlog::stdout_color_mt("ExampleApp");
 		mLogger = spdlog::get("ExampleApp");
+		if(mLogger == nullptr)
+		{
+			auto exampleAppLogger = spdlog::stdout_color_mt("ExampleApp");
+			mLogger = spdlog::get("ExampleApp");
+		}
 		//mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
+
+		mSW.AddGroup("DEBUG", true);
+		mSW.AddFieldToGroup("DEBUG", "Debug1", [this]() -> float { mDebugMeasurementCounter++; return mDebugMeasurementCounter;});
+		mSW.AddFieldToGroup("DEBUG", "Debug2", [this]() -> int { mDebugMeasurementCounter1++; return mDebugMeasurementCounter1;});
+		//mSW.AddGroup("TestGroup", true);
+		//mSW.AddFieldToGroup("TestGroup", "Debug7", [this](){ mDebugMeasurementCounter++; return mDebugMeasurementCounter;});
 	}
 
 	~ExampleApp()
@@ -45,6 +58,8 @@ public:
 		//mServer.BindAndListen(1337);
 		//mSocket.Connect("127.0.0.1", 1337);
 		mMQTTClient.Connect("127.0.0.1", 1883);
+		mSW.InfluxConnector("127.0.0.1", 9555);
+		mSW.SetBatchWriting(5s);
 	}
 
 	void OnTimerCallback()
@@ -105,6 +120,10 @@ private:
 	char mSockBuf[100];
 
 	std::string Teststring{"Test string"};
+
+	StatWriter::StatWriter mSW;
+	float mDebugMeasurementCounter = 0;
+	int mDebugMeasurementCounter1 = 8;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 
