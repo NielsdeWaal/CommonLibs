@@ -7,6 +7,7 @@ void StatWriter::AddGroup(const std::string& label, const bool batch)
 	if(batch)
 	{
 		mBatchMeasurements[label];
+		mLogger->info("Added group: {} to batch writer", label);
 	}
 }
 
@@ -15,6 +16,7 @@ void StatWriter::AddFieldToGroup(const std::string& group,
 	const std::function<std::variant<int,float>()> getter)
 {
 	mBatchMeasurements[group][label] = getter;
+	mLogger->info("Added field: {} to group: {}", label, group);
 }
 
 void StatWriter::WriteBatch()
