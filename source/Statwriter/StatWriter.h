@@ -37,15 +37,15 @@ private:
 		{
 			if(l.mTagSet != "")
 			{
-				return os << l.mMeasurement << " " << l.mTagSet << " " << l.mFieldSet; // << " " << l.mTimestamp;
+				return os << l.mMeasurement << " " << l.mTagSet << " " << l.mFieldSet;
 			}
 			else
 			{
-				return os << l.mMeasurement << " " << l.mFieldSet; // << " " << l.mTimestamp;
+				return os << l.mMeasurement << " " << l.mFieldSet;
 			}
 		}
 
-		const std::string GetLine() const
+		const std::string GetLine() const noexcept
 		{
 			std::string ret = "";
 
@@ -75,11 +75,8 @@ public:
 		}
 	}
 
-	void DebugLineMessages();
-
 	void InfluxConnector(const std::string& addr, const uint16_t port) noexcept
 	{
-		//mSocket.Connect(addr.c_str(), port);
 		mServerAddress = addr;
 		mServerPort = port;
 	}
@@ -92,7 +89,11 @@ public:
 			return;
 		}
 		mBatchInterval = interval;
-		mTimer = EventLoop::EventLoop::Timer(interval, EventLoop::EventLoop::TimerType::Repeating, [this] { WriteBatch(); });
+
+		mTimer = EventLoop::EventLoop::Timer(interval,
+					EventLoop::EventLoop::TimerType::Repeating,
+					[this] { WriteBatch(); });
+
 		mEventLoop.AddTimer(&mTimer);
 		mTimerSet = true;
 	}
@@ -106,20 +107,9 @@ public:
 	 * We want to read from an external/independent class/variable but have the 
 	 * safety of removing that reference when the data is out-of-use.
 	 * IDEAS:
-	 *	- Template ref with name (e.g template<auto& var, string name>)
-	 *
-	 * \code
-	 * include "StatWriter.h"
-	 *
-	 * void A::setup_metrics() {
-	 *   namespace sw = StatWriter::metrics;
-	 *   _metrics = sw::create_metric_group();
-	 *   _metrics->add_group("cache", {sw::make_gauge("bytes", "used", [this] { return _region.occupancy().used_space(); })});
-	 * }
-	 * \endcode
-	 *
+	 * - Template ref with name (e.g template<auto& var, string name>)
 	 */
-	void AddGroup(const std::string& label, const bool batch);
+	void AddGroup(const std::string& label, const bool batch) noexcept;
 	
 	/**
 	 * @brief Add field to group for reporting
@@ -129,12 +119,16 @@ public:
 	 * @issue The issue with the current setup is that it only excepts integers returns.
 	 * This should be fixable with variants.
 	 */
-	void AddFieldToGroup(const std::string& group, const std::string& label, const std::function<std::variant<int,float>()> getter);
-	//void AddToBatch() noexcept
+	void AddFieldToGroup(const std::string& group,
+						const std::string& label,
+						const std::function<std::variant<int,float>()> getter) noexcept;
 
 private:
-	void WriteBatch();
-	//void StatWriter::AddMeasurementsToLine(InfluxDBLine& line, const std::string& group)
+	/**
+	 * @brief Sends batch of values to TSDB
+	 */
+	void WriteBatch() noexcept;
+
 	/**
 	 * @brief Retrieve fields from registered getter and add these to influx line
 	 *
@@ -170,7 +164,10 @@ private:
 	//FIXME
 	//Current implementation doesn't provide ordering for metrics written in line messages.
 	//Is this undesireable? No clue
-	std::unordered_map<std::string, std::unordered_map<std::string, std::function<std::variant<int,float>()>>> mBatchMeasurements;
+	std::unordered_map<std::string,
+			std::unordered_map<
+				std::string, std::function<
+					std::variant<int,float>()>>> mBatchMeasurements;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
