@@ -7,6 +7,7 @@
 
 #include "EventLoop.h"
 
+#include "MQTT/MQTTClient.h"
 #include "StreamSocket.h"
 #include "UDPSocket.h"
 
@@ -15,17 +16,19 @@
 using namespace std::chrono_literals;
 
 class ExampleApp : public EventLoop::IEventLoopCallbackHandler
-				 , public Common::IStreamSocketHandler
-				 , public Common::IStreamSocketServerHandler
-				 , public Common::IUDPSocketHandler
+				 //, public Common::IStreamSocketHandler
+				 //, public Common::IStreamSocketServerHandler
+				 //, public Common::IUDPSocketHandler
+				 , public MQTT::IMQTTClientHandler
 {
 public:
 	ExampleApp(EventLoop::EventLoop& ev)
 		: mEv(ev)
 		, mTimer(1s, EventLoop::EventLoop::TimerType::Repeating, [this](){ OnTimerCallback(); })
-		, mSocket(mEv, this)
-		, mServer(mEv, this)
-		, mUDPClient(mEv, this)
+		//, mSocket(mEv, this)
+		//, mServer(mEv, this)
+		//, mUDPClient(mEv, this)
+		, mMQTTClient(mEv, this)
 		, mSW(mEv)
 	{
 		mLogger = spdlog::get("ExampleApp");
@@ -45,8 +48,8 @@ public:
 
 	~ExampleApp()
 	{
-		mSocket.Shutdown();
-		mServer.Shutdown();
+		//mSocket.Shutdown();
+		//mServer.Shutdown();
 	}
 
 	void Initialise()
@@ -54,6 +57,7 @@ public:
 		//mEv.AddTimer(&mTimer);
 		//mServer.BindAndListen(1337);
 		//mSocket.Connect("127.0.0.1", 1337);
+		mMQTTClient.Connect("127.0.0.1", 1883);
 		mSW.InfluxConnector("127.0.0.1", 9555);
 		mSW.SetBatchWriting(5s);
 	}
@@ -63,6 +67,10 @@ public:
 		//mLogger->info("Got callback from timer");
 		//mSocket.Send(Teststring.c_str(), Teststring.size());
 		//mUDPClient.Send(Teststring.c_str(), Teststring.size(), "127.0.0.1", 9999);
+		if(mMQTTClient.IsConnected())
+		{
+			mMQTTClient.Publish("test/TestTopic", "TestMessageFromCommonLibs");
+		}
 	}
 
 	void OnNextCycle()
@@ -78,32 +86,40 @@ public:
 	void OnConnected() final
 	{
 		mLogger->info("Connection succeeded");
+		mMQTTClient.Subscribe("test/TestTopic");
+		mMQTTClient.Subscribe("SCD30");
 	}
 
-	void OnDisconnect() final
+	void OnDisconnect(MQTT::MQTTClient* conn) final
 	{
 		mLogger->warn("Connection terminated");
 	}
 
-	void OnIncomingData(Common::StreamSocket* conn, char* data, size_t len) final
-	{
-		mLogger->info("Incoming: {}", std::string{data});
-		//conn->Send(data, len);
-		mEv.SheduleForNextCycle([this](){OnNextCycle();});
-	}
+	//void OnIncomingData(Common::StreamSocket* conn, char* data, size_t len) final
+	//{
+	//	mLogger->info("Incoming: {}", std::string{data});
+	//	//conn->Send(data, len);
+	//	//mEv.SheduleForNextCycle([this](){OnNextCycle();});
+	//}
 
-	Common::IStreamSocketHandler* OnIncomingConnection() final
+	//Common::IStreamSocketHandler* OnIncomingConnection() final
+	//{
+	//	return this;
+	//}
+
+	void OnPublish(const std::string& topic, const std::string& msg) override
 	{
-		return this;
+		mLogger->info("Incoming publish, topic: {}, msg: {}", topic, msg);
 	}
 
 private:
 	EventLoop::EventLoop& mEv;
 	EventLoop::EventLoop::Timer mTimer;
 
-	Common::StreamSocket mSocket;
-	Common::StreamSocketServer mServer;
-	Common::UDPSocket mUDPClient;
+	//Common::StreamSocket mSocket;
+	//Common::StreamSocketServer mServer;
+	//Common::UDPSocket mUDPClient;
+	MQTT::MQTTClient mMQTTClient;
 
 	int mFd = 0;
 	char mSockBuf[100];
