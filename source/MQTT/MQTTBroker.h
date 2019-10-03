@@ -12,6 +12,17 @@
 
 namespace MQTTBroker {
 
+/**
+ * @brief An MQTT broker
+ *
+ * This is a *very* rough and basic implementation of an MQTT broker/server.
+ * It only supports QoS 0 for now and barely at that.
+ *
+ * A lot of the edge cases haven't been implemented. but most of it should function as the standard dictates.
+ *
+ * @todo This broker really should be moved to it's own project instead of packaged with commonlibs
+ */
+
 using namespace MQTT;
 
 class MQTTBroker : public Common::IStreamSocketHandler

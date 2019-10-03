@@ -177,11 +177,14 @@ public:
 		, mTopicPayload(data + topicLen, payloadLen - 2)
 	{}
 
-	MQTTPublishPacket(std::uint16_t packetID, const std::string& topic, const std::string& msg)
-		: mPacketIdentifier(packetID)
-		, mTopicFilter(topic)
+	MQTTPublishPacket(std::uint16_t packetID, const std::string& topic,
+			const std::string& msg, std::optional<int> qos)
+		: mTopicFilter(topic)
 		, mTopicPayload(msg)
-	{}
+		, mPacketIdentifier(packetID)
+	{
+		mQoS = qos.value_or(0);
+	}
 
 	const std::vector<char> GetMessage() const noexcept
 	{
@@ -198,8 +201,11 @@ public:
 
 		message.insert(std::end(message), std::begin(mTopicFilter), std::end(mTopicFilter));
 
-		//message.push_back(static_cast<char>(mPacketIdentifier >> 8));
-		//message.push_back(static_cast<char>(mPacketIdentifier & 0x0F));
+		if(mQoS)
+		{
+			message.push_back(static_cast<char>(mPacketIdentifier >> 8));
+			message.push_back(static_cast<char>(mPacketIdentifier & 0x0F));
+		}
 
 		message.insert(std::end(message), std::begin(mTopicPayload), std::end(mTopicPayload));
 
@@ -208,10 +214,22 @@ public:
 		return message;
 	}
 
-//private:
+	std::string GetTopicFilter() const noexcept
+	{
+		return mTopicFilter;
+	}
+
+	std::string GetTopicPayload() const noexcept
+	{
+		return mTopicPayload;
+	}
+
+private:
 	std::string mTopicFilter;
 	std::string mTopicPayload;
 	std::uint16_t mPacketIdentifier;
+
+	int mQoS = 0;
 };
 
 class MQTTDisconnectPacket

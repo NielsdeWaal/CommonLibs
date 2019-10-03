@@ -17,7 +17,6 @@ class IMQTTClientHandler
 public:
 	virtual void OnConnected() = 0;
 	virtual void OnDisconnect(MQTTClient* conn) = 0;
-	//virtual void OnIncomingData(MQTTClient* conn, char* data, size_t len) = 0;
 	virtual void OnPublish(const std::string& topic, const std::string& msg) = 0;
 	virtual ~IMQTTClientHandler() {}
 };
@@ -36,8 +35,7 @@ public:
 		{
 			auto mqttclientlogger = spdlog::stdout_color_mt("MQTTClient");
 			mLogger = spdlog::get("MQTTClient");
-		}
-	}
+		} }
 
 	~MQTTClient()
 	{
@@ -51,7 +49,13 @@ public:
 		}
 	}
 
-	const bool IsConnected() const noexcept
+	void Initialise(const std::string& clientId, std::optional<int> keepAlive)
+	{
+		mClientId = clientId;
+		mKeepAlive = keepAlive.value_or(60);
+	}
+
+	bool IsConnected() const noexcept
 	{
 		return (mTCPConnected && mMQTTConnected);
 	}
@@ -97,11 +101,12 @@ public:
 			return;
 		}
 
-		const MQTTPublishPacket pubPacket(mPacketIdentifier, topic, message);
+		const MQTTPublishPacket pubPacket(mPacketIdentifier, topic, message, std::nullopt);
 		const auto packet = pubPacket.GetMessage();
 
 		mConnection.Send(packet.data(), packet.size());
 
+		//TODO Implement QoS higher then 0
 		//++mPacketIdentifier;
 	}
 
@@ -110,7 +115,7 @@ public:
 		mLogger->info("Connection succeeded");
 		mTCPConnected = true;
 
-		const MQTTConnectPacket connectPacket(60, "ClientID1", 1);
+		const MQTTConnectPacket connectPacket(mKeepAlive, mClientId, 1);
 		const auto packet = connectPacket.GetMessage();
 		mConnection.Send(packet.data(), packet.size());
 
@@ -120,6 +125,8 @@ public:
 	void OnDisconnect(Common::StreamSocket* conn) final
 	{
 		mLogger->warn("Connection terminated");
+		mTCPConnected = false;
+		mMQTTConnected = false;
 	}
 
 	void OnIncomingData(Common::StreamSocket* conn, char* data, size_t len) final
@@ -138,7 +145,8 @@ public:
 
 			case MQTTPacketType::PUBLISH:
 			{
-				mHandler->OnPublish(incomingPacket.mPublish.mTopicFilter, incomingPacket.mPublish.mTopicPayload);
+				mHandler->OnPublish(incomingPacket.mPublish.GetTopicFilter(),
+						incomingPacket.mPublish.GetTopicPayload());
 				break;
 			}
 
@@ -177,6 +185,9 @@ private:
 	IMQTTClientHandler* mHandler;
 
 	EventLoop::EventLoop::Timer mKeepAliveTimer;
+
+	std::string mClientId;
+	int mKeepAlive;
 
 	bool mTCPConnected = false;
 	bool mMQTTConnected = false;
