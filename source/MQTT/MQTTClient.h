@@ -171,8 +171,9 @@ public:
 
 			case MQTTPacketType::PUBLISH:
 			{
-				mHandler->OnPublish(incomingPacket.mPublish.GetTopicFilter(),
-						incomingPacket.mPublish.GetTopicPayload());
+				auto pubPacket = incomingPacket.GetPublishPacket();
+				mHandler->OnPublish(pubPacket->GetTopicFilter(),
+						pubPacket->GetTopicPayload());
 				break;
 			}
 
@@ -183,7 +184,8 @@ public:
 
 			case MQTTPacketType::SUBACK:
 			{
-				const auto& topic = mUnacknoledgedPackets[incomingPacket.mSuback.GetPacketId()];
+				auto subAckPacket = incomingPacket.GetSubAckPacket();
+				const auto& topic = mUnacknoledgedPackets[subAckPacket->GetPacketId()];
 				mAcknowledgedSubscriptions.push_back(topic);
 				break;
 			}
@@ -191,7 +193,8 @@ public:
 			case MQTTPacketType::UNSUBACK:
 			{
 				mLogger->info("Unsubscribe confirmed");
-				const auto& topic = mUnacknoledgedPackets[incomingPacket.mSuback.GetPacketId()];
+				auto unSubAckPacket = incomingPacket.GetUnSubAckPacket();
+				const auto& topic = mUnacknoledgedPackets[unSubAckPacket->GetPacketId()];
 				mAcknowledgedSubscriptions.erase(
 						std::find(
 							std::begin(mAcknowledgedSubscriptions),

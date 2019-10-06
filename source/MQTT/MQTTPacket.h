@@ -1,7 +1,12 @@
 #ifndef MQTTPACKET_H
 #define MQTTPACKET_H
 
+#include <variant>
+
 namespace MQTT {
+
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 enum class MQTTPacketType : char
 {
@@ -437,52 +442,116 @@ private:
 	std::uint8_t mReturnCode;
 };
 
+class MQTTUnsubackPacket
+{
+public:
+	MQTTUnsubackPacket()
+	{}
+
+	MQTTUnsubackPacket(std::uint16_t packetId)
+		: mPacketIdentifier(packetId)
+	{}
+
+	MQTTUnsubackPacket(const char* data)
+		: mPacketIdentifier(data[0] << 8 | data[1])
+	{}
+
+	std::vector<char> GetMessage() const
+	{
+		std::vector<char> message;
+		message.push_back(static_cast<char>(MQTTPacketType::UNSUBACK) << 4 | 0);
+		message.push_back(2); // packet length
+
+		message.push_back(static_cast<char>(mPacketIdentifier >> 8));
+		message.push_back(static_cast<char>(mPacketIdentifier & 0x0F));
+
+		return message;
+	}
+
+	std::uint16_t GetPacketId() const noexcept
+	{
+		return mPacketIdentifier;
+	}
+
+private:
+	std::uint16_t mPacketIdentifier;
+};
+
 class MQTTPacket
 {
 public:
 	MQTTPacket(const char* data)
 		: mFixedHeader(data)
 	{
-		//TODO Construct contents based on packet type in header
-		if(mFixedHeader.mType == MQTTPacketType::CONNECT)
+		switch(mFixedHeader.mType)
 		{
-			mConnect = MQTTConnectPacket(data + 4);
-		}
-		else if(mFixedHeader.mType == MQTTPacketType::PUBLISH)
-		{
-			mPublish = MQTTPublishPacket(data + 4, (data[2] << 8 | (data[3] & 0xFF)), mFixedHeader.GetSize() - (data[2] << 8 | (data[3] & 0xFF)));
-		}
-		else if(mFixedHeader.mType == MQTTPacketType::DISCONNECT)
-		{
-			mDisconnect = MQTTDisconnectPacket(data);
-		}
-		else if(mFixedHeader.mType == MQTTPacketType::SUBSCRIBE)
-		{
-			mSubscribe = MQTTSubscribePacket(data + 2);
-		}
-		else if(mFixedHeader.mType == MQTTPacketType::SUBACK)
-		{
-			mSuback = MQTTSubackPacket(data + 2);
-		}
-		else if(mFixedHeader.mType == MQTTPacketType::PINGREQ)
-		{
-			mPingRequest = MQTTPingRequestPacket();
-		}
-		else if(mFixedHeader.mType == MQTTPacketType::PINGRESP)
-		{
-			mPingResponse = MQTTPingResponsePacket();
+			case MQTTPacketType::CONNECT:
+			{
+				mContents = MQTTConnectPacket(data + 4);
+				break;
+			}
+			case MQTTPacketType::PUBLISH:
+			{
+				mContents = MQTTPublishPacket(data + 4, (data[2] << 8 | (data[3] & 0xFF)), mFixedHeader.GetSize() - (data[2] << 8 | (data[3] & 0xFF)));
+				break;
+			}
+			case MQTTPacketType::DISCONNECT:
+			{
+				mContents = MQTTDisconnectPacket(data);
+				break;
+			}
+			case MQTTPacketType::SUBSCRIBE:
+			{
+				mContents = MQTTSubscribePacket(data + 2);
+				break;
+			}
+			case MQTTPacketType::SUBACK:
+			{
+				mContents = MQTTSubackPacket(data + 2);
+				break;
+			}
+			case MQTTPacketType::UNSUBACK:
+			{
+				mContents = MQTTUnsubackPacket(data + 2);
+				break;
+			}
+			case MQTTPacketType::PINGREQ:
+			{
+				mContents = MQTTPingRequestPacket();
+				break;
+			}
+			case MQTTPacketType::PINGRESP:
+			{
+				mContents = MQTTPingResponsePacket();
+				break;
+			}
 		}
 	}
 
-	//std::variant<MQTTConnectPacket> mContents;
+	auto GetPublishPacket() const noexcept
+	{
+		return std::get_if<MQTTPublishPacket>(&mContents);
+	}
+
+	auto GetSubAckPacket() const noexcept
+	{
+		return std::get_if<MQTTSubackPacket>(&mContents);
+	}
+
+	auto GetUnSubAckPacket() const noexcept
+	{
+		return std::get_if<MQTTUnsubackPacket>(&mContents);
+	}
+
+	std::variant<MQTTConnectPacket
+				,MQTTPublishPacket
+				,MQTTDisconnectPacket
+				,MQTTSubscribePacket
+				,MQTTSubackPacket
+				,MQTTUnsubackPacket
+				,MQTTPingRequestPacket
+				,MQTTPingResponsePacket> mContents;
 	MQTTFixedHeader mFixedHeader;
-	MQTTConnectPacket mConnect;
-	MQTTPublishPacket mPublish;
-	MQTTDisconnectPacket mDisconnect;
-	MQTTSubscribePacket mSubscribe;
-	MQTTSubackPacket mSuback;
-	MQTTPingRequestPacket mPingRequest;
-	MQTTPingResponsePacket mPingResponse;
 };
 
 class MQTTConnackPacket
