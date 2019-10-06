@@ -88,20 +88,24 @@ public:
 
 		mConnection.Send(packet.data(), packet.size());
 
+		mUnacknoledgedPackets[mPacketIdentifier] = topic;
+
 		++mPacketIdentifier;
 	}
 
-	void UnSubscribe(const std::string& topic)
+	void Unsubscribe(const std::string& topic)
 	{
 		if(!mTCPConnected && !mMQTTConnected)
 		{
-			mLogger->error("Can't subscribe while not connected");
+			mLogger->error("Can't unsubscribe while not connected");
 			return;
 		}
 
-		if()
+		if(
+			(std::find(std::begin(mAcknowledgedSubscriptions), std::end(mAcknowledgedSubscriptions), topic)
+			== std::end(mAcknowledgedSubscriptions)))
 		{
-			mLogger->error("Can't subscribe while not connected");
+			mLogger->error("Can't unsubscribe from unconfirmed or unsubscribed topic");
 			return;
 		}
 
@@ -109,6 +113,8 @@ public:
 		const auto packet = unsubPacket.GetMessage();
 
 		mConnection.Send(packet.data(), packet.size());
+
+		mUnacknoledgedPackets[mPacketIdentifier] = topic;
 
 		++mPacketIdentifier;
 	}
@@ -177,7 +183,20 @@ public:
 
 			case MQTTPacketType::SUBACK:
 			{
-				const auto topic = mUnacknoledgedPackets[incomingPacket.mSubscribe];
+				const auto& topic = mUnacknoledgedPackets[incomingPacket.mSuback.GetPacketId()];
+				mAcknowledgedSubscriptions.push_back(topic);
+				break;
+			}
+
+			case MQTTPacketType::UNSUBACK:
+			{
+				mLogger->info("Unsubscribe confirmed");
+				const auto& topic = mUnacknoledgedPackets[incomingPacket.mSuback.GetPacketId()];
+				mAcknowledgedSubscriptions.erase(
+						std::find(
+							std::begin(mAcknowledgedSubscriptions),
+							std::end(mAcknowledgedSubscriptions),
+							topic));
 				break;
 			}
 

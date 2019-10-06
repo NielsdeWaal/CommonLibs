@@ -374,7 +374,7 @@ public:
 	std::vector<char> GetMessage() const noexcept
 	{
 		std::vector<char> message;
-		message.push_back(static_cast<char>(MQTTPacketType::UNSUBSCRIBE) << 4 | 0b0000010);
+		message.push_back(static_cast<char>(MQTTPacketType::UNSUBSCRIBE) << 4 | 0b0010);
 		message.push_back(static_cast<char>(2 + // var header
 											2 + mTopicLength // size bytes + topic size
 											));
@@ -394,35 +394,47 @@ private:
 	std::uint16_t mPacketIdentifier;
 	std::size_t mTopicLength;
 	std::string mTopicFilter;
-	std::string mMessage;
 };
 
+//TODO return code needs to be in typed enum so validity can be checked
 class MQTTSubackPacket
 {
 public:
-	MQTTSubackPacket(std::uint16_t packetId, std::uint8_t retCode)
-		: mMessage({
-				static_cast<char>((static_cast<std::uint8_t>(MQTTPacketType::SUBACK) << 4 | 0))
-				, 3
-				, static_cast<char>(packetId >> 8)
-				, static_cast<char>(packetId & 0xFF)
-				, static_cast<char>(retCode)
-				})
+	MQTTSubackPacket()
 	{}
 
-	const char* GetMessage() const
+	MQTTSubackPacket(std::uint16_t packetId, std::uint8_t retCode)
+		: mPacketIdentifier(packetId)
+		, mReturnCode(retCode)
+	{}
+
+	MQTTSubackPacket(const char* data)
+		: mPacketIdentifier(data[0] << 8 | data[1])
+		, mReturnCode(data[3])
+	{}
+
+	std::vector<char> GetMessage() const
 	{
-		return mMessage.data();
+		std::vector<char> message;
+		message.push_back(static_cast<char>(MQTTPacketType::SUBACK) << 4 | 0);
+		message.push_back(3); // packet length
+
+		message.push_back(static_cast<char>(mPacketIdentifier >> 8));
+		message.push_back(static_cast<char>(mPacketIdentifier & 0x0F));
+
+		message.push_back(mReturnCode);
+
+		return message;
 	}
 
-	constexpr std::size_t GetSize() const
+	std::uint16_t GetPacketId() const noexcept
 	{
-		return mMessage.size();
+		return mPacketIdentifier;
 	}
 
 private:
-	std::array<char, 5> mMessage;
-
+	std::uint16_t mPacketIdentifier;
+	std::uint8_t mReturnCode;
 };
 
 class MQTTPacket
