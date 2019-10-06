@@ -35,7 +35,8 @@ public:
 		{
 			auto mqttclientlogger = spdlog::stdout_color_mt("MQTTClient");
 			mLogger = spdlog::get("MQTTClient");
-		} }
+		}
+	}
 
 	~MQTTClient()
 	{
@@ -91,7 +92,26 @@ public:
 	}
 
 	void UnSubscribe(const std::string& topic)
-	{}
+	{
+		if(!mTCPConnected && !mMQTTConnected)
+		{
+			mLogger->error("Can't subscribe while not connected");
+			return;
+		}
+
+		if()
+		{
+			mLogger->error("Can't subscribe while not connected");
+			return;
+		}
+
+		const MQTTUnsubscribePacket unsubPacket(mPacketIdentifier, topic);
+		const auto packet = unsubPacket.GetMessage();
+
+		mConnection.Send(packet.data(), packet.size());
+
+		++mPacketIdentifier;
+	}
 
 	void Publish(const std::string& topic, const std::string& message)
 	{
@@ -157,6 +177,7 @@ public:
 
 			case MQTTPacketType::SUBACK:
 			{
+				const auto topic = mUnacknoledgedPackets[incomingPacket.mSubscribe];
 				break;
 			}
 
@@ -165,9 +186,7 @@ public:
 				mLogger->warn("Unknown packet type");
 				break;
 			}
-
 		}
-
 	}
 
 	void KeepAlive()
@@ -193,6 +212,9 @@ private:
 	bool mMQTTConnected = false;
 
 	uint16_t mPacketIdentifier = 1;
+
+	std::vector<std::string> mAcknowledgedSubscriptions;
+	std::unordered_map<int, std::string> mUnacknoledgedPackets;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };

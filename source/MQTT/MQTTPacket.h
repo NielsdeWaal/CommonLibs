@@ -3,7 +3,7 @@
 
 namespace MQTT {
 
-enum MQTTPacketType
+enum class MQTTPacketType : char
 {
 	CONNECT = 1,
 	CONNACK = 2,
@@ -21,7 +21,7 @@ enum MQTTPacketType
 	DISCONNECT = 14,
 };
 
-enum MQTTQoSType
+enum class MQTTQoSType : char
 {
 	ONE = 1,
 	TWO = 2,
@@ -128,7 +128,7 @@ public:
 		return mClientID;
 	}
 
-	const std::vector<char> GetMessage() const noexcept
+	std::vector<char> GetMessage() const noexcept
 	{
 		std::vector<char> message;
 		message.push_back(static_cast<char>(MQTTPacketType::CONNECT) << 4);
@@ -186,7 +186,7 @@ public:
 		mQoS = qos.value_or(0);
 	}
 
-	const std::vector<char> GetMessage() const noexcept
+	std::vector<char> GetMessage() const noexcept
 	{
 		std::vector<char> message;
 		message.push_back(static_cast<char>(MQTTPacketType::PUBLISH) << 4);
@@ -246,7 +246,7 @@ public:
 	MQTTDisconnectPacket()
 	{}
 
-	const std::vector<char> GetMessage() const noexcept
+	std::vector<char> GetMessage() const noexcept
 	{
 		std::vector<char> message;
 		message.push_back(static_cast<char>(MQTTPacketType::DISCONNECT) << 4);
@@ -262,56 +262,6 @@ public:
 
 private:
 	bool mValidDisconnect = true;
-};
-
-//TODO Support multiple topics from a single sub packet
-class MQTTSubscribePacket
-{
-public:
-	MQTTSubscribePacket()
-	{}
-
-	MQTTSubscribePacket(const char* data)
-		: mPacketIdentifier(data[0] << 8 | data[1])
-		, mTopicLength(data[2] << 8 | data[3])
-		, mTopicFilter(data + 4 , mTopicLength)
-	{}
-
-	MQTTSubscribePacket(std::uint16_t packetID, const std::string& topic)
-		: mPacketIdentifier(packetID)
-		, mTopicFilter(topic)
-	{
-		mTopicLength = mTopicFilter.size();
-	}
-
-	const std::vector<char> GetMessage() const noexcept
-	{
-		std::vector<char> message;
-		message.push_back(static_cast<char>(MQTTPacketType::SUBSCRIBE) << 4 | 0b0000010);
-		message.push_back(static_cast<char>(2 + // var header
-											2 + mTopicLength + // size bytes + topic size
-											1 // QoS byte
-											));
-
-		message.push_back(static_cast<char>(mPacketIdentifier >> 8));
-		message.push_back(static_cast<char>(mPacketIdentifier & 0x0F));
-
-		message.push_back(static_cast<char>(mTopicLength >> 8));
-		message.push_back(static_cast<char>(mTopicLength & 0x0F));
-
-		message.insert(std::end(message), std::begin(mTopicFilter), std::end(mTopicFilter));
-
-		message.push_back(0);
-
-		return message;
-	}
-
-	std::uint16_t mPacketIdentifier;
-	std::size_t mTopicLength;
-	std::string mTopicFilter;
-
-private:
-	std::string mRest;
 };
 
 class MQTTPingRequestPacket
@@ -354,6 +304,97 @@ public:
 
 private:
 	MQTTHeaderOnlyPacket mPacket;
+};
+
+//TODO Support multiple topics from a single sub packet
+class MQTTSubscribePacket
+{
+public:
+	MQTTSubscribePacket()
+	{}
+
+	MQTTSubscribePacket(const char* data)
+		: mPacketIdentifier(data[0] << 8 | data[1])
+		, mTopicLength(data[2] << 8 | data[3])
+		, mTopicFilter(data + 4 , mTopicLength)
+	{}
+
+	MQTTSubscribePacket(std::uint16_t packetId, const std::string& topic)
+		: mPacketIdentifier(packetId)
+		, mTopicLength(topic.size())
+		, mTopicFilter(topic)
+	{}
+
+	std::vector<char> GetMessage() const noexcept
+	{
+		std::vector<char> message;
+		message.push_back(static_cast<char>(MQTTPacketType::SUBSCRIBE) << 4 | 0b0000010);
+		message.push_back(static_cast<char>(2 + // var header
+											2 + mTopicLength + // size bytes + topic size
+											1 // QoS byte
+											));
+
+		message.push_back(static_cast<char>(mPacketIdentifier >> 8));
+		message.push_back(static_cast<char>(mPacketIdentifier & 0x0F));
+
+		message.push_back(static_cast<char>(mTopicLength >> 8));
+		message.push_back(static_cast<char>(mTopicLength & 0x0F));
+
+		message.insert(std::end(message), std::begin(mTopicFilter), std::end(mTopicFilter));
+
+		message.push_back(0); // QoS
+
+		return message;
+	}
+
+private:
+	std::uint16_t mPacketIdentifier;
+	std::size_t mTopicLength;
+	std::string mTopicFilter;
+};
+
+class MQTTUnsubscribePacket
+{
+public:
+	MQTTUnsubscribePacket()
+	{}
+
+	MQTTUnsubscribePacket(const char* data)
+		: mPacketIdentifier(data[0] << 8 | data[1])
+		, mTopicLength(data[2] << 8 | data[3])
+		, mTopicFilter(data + 4 , mTopicLength)
+	{}
+
+	MQTTUnsubscribePacket(std::uint16_t packetId, const std::string& topic)
+		: mPacketIdentifier(packetId)
+		, mTopicLength(topic.size())
+		, mTopicFilter(topic)
+	{}
+
+	std::vector<char> GetMessage() const noexcept
+	{
+		std::vector<char> message;
+		message.push_back(static_cast<char>(MQTTPacketType::UNSUBSCRIBE) << 4 | 0b0000010);
+		message.push_back(static_cast<char>(2 + // var header
+											2 + mTopicLength // size bytes + topic size
+											));
+
+		message.push_back(static_cast<char>(mPacketIdentifier >> 8));
+		message.push_back(static_cast<char>(mPacketIdentifier & 0x0F));
+
+		message.push_back(static_cast<char>(mTopicLength >> 8));
+		message.push_back(static_cast<char>(mTopicLength & 0x0F));
+
+		message.insert(std::end(message), std::begin(mTopicFilter), std::end(mTopicFilter));
+
+		return message;
+	}
+
+private:
+	std::uint16_t mPacketIdentifier;
+	std::size_t mTopicLength;
+	std::string mTopicFilter;
+	std::string mMessage;
 };
 
 class MQTTSubackPacket
@@ -407,6 +448,10 @@ public:
 		{
 			mSubscribe = MQTTSubscribePacket(data + 2);
 		}
+		else if(mFixedHeader.mType == MQTTPacketType::SUBACK)
+		{
+			mSuback = MQTTSubackPacket(data + 2);
+		}
 		else if(mFixedHeader.mType == MQTTPacketType::PINGREQ)
 		{
 			mPingRequest = MQTTPingRequestPacket();
@@ -423,6 +468,7 @@ public:
 	MQTTPublishPacket mPublish;
 	MQTTDisconnectPacket mDisconnect;
 	MQTTSubscribePacket mSubscribe;
+	MQTTSubackPacket mSuback;
 	MQTTPingRequestPacket mPingRequest;
 	MQTTPingResponsePacket mPingResponse;
 };
