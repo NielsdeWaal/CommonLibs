@@ -17,7 +17,6 @@ class IMQTTClientHandler
 public:
 	virtual void OnConnected() = 0;
 	virtual void OnDisconnect(MQTTClient* conn) = 0;
-	//virtual void OnIncomingData(MQTTClient* conn, char* data, size_t len) = 0;
 	virtual void OnPublish(const std::string& topic, const std::string& msg) = 0;
 	virtual ~IMQTTClientHandler() {}
 };
@@ -51,7 +50,13 @@ public:
 		}
 	}
 
-	const bool IsConnected() const noexcept
+	void Initialise(const std::string& clientId, std::optional<int> keepAlive)
+	{
+		mClientId = clientId;
+		mKeepAlive = keepAlive.value_or(60);
+	}
+
+	bool IsConnected() const noexcept
 	{
 		return (mTCPConnected && mMQTTConnected);
 	}
@@ -83,11 +88,36 @@ public:
 
 		mConnection.Send(packet.data(), packet.size());
 
+		mUnacknoledgedPackets[mPacketIdentifier] = topic;
+
 		++mPacketIdentifier;
 	}
 
-	void UnSubscribe(const std::string& topic)
-	{}
+	void Unsubscribe(const std::string& topic)
+	{
+		if(!mTCPConnected && !mMQTTConnected)
+		{
+			mLogger->error("Can't unsubscribe while not connected");
+			return;
+		}
+
+		if(
+			(std::find(std::begin(mAcknowledgedSubscriptions), std::end(mAcknowledgedSubscriptions), topic)
+			== std::end(mAcknowledgedSubscriptions)))
+		{
+			mLogger->error("Can't unsubscribe from unconfirmed or unsubscribed topic");
+			return;
+		}
+
+		const MQTTUnsubscribePacket unsubPacket(mPacketIdentifier, topic);
+		const auto packet = unsubPacket.GetMessage();
+
+		mConnection.Send(packet.data(), packet.size());
+
+		mUnacknoledgedPackets[mPacketIdentifier] = topic;
+
+		++mPacketIdentifier;
+	}
 
 	void Publish(const std::string& topic, const std::string& message)
 	{
@@ -97,11 +127,12 @@ public:
 			return;
 		}
 
-		const MQTTPublishPacket pubPacket(mPacketIdentifier, topic, message);
+		const MQTTPublishPacket pubPacket(mPacketIdentifier, topic, message, std::nullopt);
 		const auto packet = pubPacket.GetMessage();
 
 		mConnection.Send(packet.data(), packet.size());
 
+		//TODO Implement QoS higher then 0
 		//++mPacketIdentifier;
 	}
 
@@ -110,7 +141,7 @@ public:
 		mLogger->info("Connection succeeded");
 		mTCPConnected = true;
 
-		const MQTTConnectPacket connectPacket(60, "ClientID1", 1);
+		const MQTTConnectPacket connectPacket(mKeepAlive, mClientId, 1);
 		const auto packet = connectPacket.GetMessage();
 		mConnection.Send(packet.data(), packet.size());
 
@@ -120,6 +151,8 @@ public:
 	void OnDisconnect(Common::StreamSocket* conn) final
 	{
 		mLogger->warn("Connection terminated");
+		mTCPConnected = false;
+		mMQTTConnected = false;
 	}
 
 	void OnIncomingData(Common::StreamSocket* conn, char* data, size_t len) final
@@ -138,7 +171,9 @@ public:
 
 			case MQTTPacketType::PUBLISH:
 			{
-				mHandler->OnPublish(incomingPacket.mPublish.mTopicFilter, incomingPacket.mPublish.mTopicPayload);
+				auto pubPacket = incomingPacket.GetPublishPacket();
+				mHandler->OnPublish(pubPacket->GetTopicFilter(),
+						pubPacket->GetTopicPayload());
 				break;
 			}
 
@@ -149,6 +184,22 @@ public:
 
 			case MQTTPacketType::SUBACK:
 			{
+				auto subAckPacket = incomingPacket.GetSubAckPacket();
+				const auto& topic = mUnacknoledgedPackets[subAckPacket->GetPacketId()];
+				mAcknowledgedSubscriptions.push_back(topic);
+				break;
+			}
+
+			case MQTTPacketType::UNSUBACK:
+			{
+				mLogger->info("Unsubscribe confirmed");
+				auto unSubAckPacket = incomingPacket.GetUnSubAckPacket();
+				const auto& topic = mUnacknoledgedPackets[unSubAckPacket->GetPacketId()];
+				mAcknowledgedSubscriptions.erase(
+						std::find(
+							std::begin(mAcknowledgedSubscriptions),
+							std::end(mAcknowledgedSubscriptions),
+							topic));
 				break;
 			}
 
@@ -157,9 +208,7 @@ public:
 				mLogger->warn("Unknown packet type");
 				break;
 			}
-
 		}
-
 	}
 
 	void KeepAlive()
@@ -178,10 +227,16 @@ private:
 
 	EventLoop::EventLoop::Timer mKeepAliveTimer;
 
+	std::string mClientId;
+	int mKeepAlive;
+
 	bool mTCPConnected = false;
 	bool mMQTTConnected = false;
 
 	uint16_t mPacketIdentifier = 1;
+
+	std::vector<std::string> mAcknowledgedSubscriptions;
+	std::unordered_map<int, std::string> mUnacknoledgedPackets;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
