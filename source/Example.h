@@ -39,6 +39,8 @@ public:
 		}
 		//mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
 
+		mMQTTClient.Initialise("Client1", 60);
+
 		mSW.AddGroup("DEBUG", true);
 		mSW.AddFieldToGroup("DEBUG", "Debug1", [this]() -> float { mDebugMeasurementCounter++; return mDebugMeasurementCounter;});
 		mSW.AddFieldToGroup("DEBUG", "Debug2", [this]() -> int { mDebugMeasurementCounter1++; return mDebugMeasurementCounter1;});
@@ -54,7 +56,7 @@ public:
 
 	void Initialise()
 	{
-		//mEv.AddTimer(&mTimer);
+		mEv.AddTimer(&mTimer);
 		//mServer.BindAndListen(1337);
 		//mSocket.Connect("127.0.0.1", 1337);
 		mMQTTClient.Connect("127.0.0.1", 1883);
@@ -110,6 +112,7 @@ public:
 	void OnPublish(const std::string& topic, const std::string& msg) override
 	{
 		mLogger->info("Incoming publish, topic: {}, msg: {}", topic, msg);
+		mMQTTClient.Unsubscribe("test/TestTopic");
 	}
 
 private:
