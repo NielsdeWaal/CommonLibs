@@ -526,7 +526,7 @@ public:
 			}
 			case MQTTPacketType::CONNACK:
 			{
-				mContents = MQTTConnackPacket();
+				mContents = MQTTConnackPacket(data + 2);
 				break;
 			}
 			case MQTTPacketType::PUBLISH:
