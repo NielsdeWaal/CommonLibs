@@ -168,6 +168,43 @@ private:
 	}
 };
 
+class MQTTConnackPacket
+{
+public:
+	MQTTConnackPacket()
+	{}
+
+	MQTTConnackPacket(MQTTConnectPacket incConn, bool sessionPresent)
+		: mMessage({
+				static_cast<char>((static_cast<std::uint8_t>(MQTTPacketType::CONNACK) << 4 | 0 )),
+				0b0010,
+				static_cast<char>(sessionPresent ? 1 : 0),
+				//static_cast<char>(return_code)
+				0
+				})
+	{}
+
+	MQTTConnackPacket(const char* data)
+		: mSessionPresent(static_cast<bool>(data[0]))
+		, mReturnCode(static_cast<std::uint8_t>(data[1]))
+	{}
+
+	const char* GetMessage() const
+	{
+		return mMessage.data();
+	}
+
+	std::size_t GetSize() const
+	{
+		return mMessage.size();
+	}
+
+private:
+	bool mSessionPresent;
+	std::uint8_t mReturnCode;
+	std::array<char, 4> mMessage;
+};
+
 class MQTTPublishPacket
 {
 public:
@@ -487,6 +524,11 @@ public:
 				mContents = MQTTConnectPacket(data + 4);
 				break;
 			}
+			case MQTTPacketType::CONNACK:
+			{
+				mContents = MQTTConnackPacket();
+				break;
+			}
 			case MQTTPacketType::PUBLISH:
 			{
 				mContents = MQTTPublishPacket(data + 4, (data[2] << 8 | (data[3] & 0xFF)), mFixedHeader.GetSize() - (data[2] << 8 | (data[3] & 0xFF)));
@@ -541,6 +583,7 @@ public:
 	}
 
 	std::variant<MQTTConnectPacket
+				,MQTTConnackPacket
 				,MQTTPublishPacket
 				,MQTTDisconnectPacket
 				,MQTTSubscribePacket
@@ -548,34 +591,8 @@ public:
 				,MQTTUnsubackPacket
 				,MQTTPingRequestPacket
 				,MQTTPingResponsePacket> mContents;
+
 	MQTTFixedHeader mFixedHeader;
-};
-
-class MQTTConnackPacket
-{
-public:
-	MQTTConnackPacket(MQTTConnectPacket incConn, bool sessionPresent)
-		: mMessage({
-				static_cast<char>((static_cast<std::uint8_t>(MQTTPacketType::CONNACK) << 4 | 0 )),
-				0b0010,
-				static_cast<char>(sessionPresent ? 1 : 0),
-				//static_cast<char>(return_code)
-				0
-				})
-	{}
-
-	const char* GetMessage() const
-	{
-		return mMessage.data();
-	}
-
-	std::size_t GetSize() const
-	{
-		return mMessage.size();
-	}
-
-private:
-	std::array<char, 4> mMessage;
 };
 
 }
