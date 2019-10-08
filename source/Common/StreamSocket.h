@@ -13,7 +13,7 @@ class IStreamSocketHandler
 {
 public:
 	virtual void OnConnected() = 0;
-	virtual void OnDisconnect() = 0;
+	virtual void OnDisconnect(StreamSocket* conn) = 0;
 	virtual void OnIncomingData(StreamSocket* conn, char* data, size_t len) = 0;
 	virtual ~IStreamSocketHandler() {}
 };
@@ -137,7 +137,7 @@ private:
 				else
 				{
 					mEventLoop.UnregisterFiledescriptor(mFd);
-					mHandler->OnDisconnect();
+					mHandler->OnDisconnect(this);
 					mConnected = false;
 				}
 			}
@@ -164,7 +164,7 @@ private:
 		{
 			mLogger->info("Socket has been disconnected, closing filedescriptor. fd:{}", fd);
 			mEventLoop.UnregisterFiledescriptor(mFd);
-			mHandler->OnDisconnect();
+			mHandler->OnDisconnect(this);
 			mConnected = false;
 			return;
 		}

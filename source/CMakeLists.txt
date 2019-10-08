@@ -46,6 +46,9 @@ add_executable(CommonLibs
 	EventLoop/EventLoop.h
 	Common/StreamSocket.h
 	Common/UDPSocket.h
+	MQTT/MQTTPacket.h
+	MQTT/MQTTClient.h
+	MQTT/MQTTBroker.h
 	Statwriter/StatWriter.h
 	Statwriter/StatWriter.cpp
 	Example.h
