@@ -104,7 +104,7 @@ public:
 	 * A variable is added to the list of items that get send to the TSDB at the specified interval.
 	 *
 	 * TODO Figure out a way to have a stable reference to variable in order to act like a singleton.
-	 * We want to read from an external/independent class/variable but have the 
+	 * We want to read from an external/independent class/variable but have the
 	 * safety of removing that reference when the data is out-of-use.
 	 * IDEAS:
 	 * - Template ref with name (e.g template<auto& var, string name>)
@@ -131,13 +131,11 @@ private:
 
 	/**
 	 * @brief Retrieve fields from registered getter and add these to influx line
-	 *
-	 * @todo current implementation uses ugly loop for joining variables.
-	 * This should be replaced with an FMT (join?) function
 	 */
 	void AddMeasurementsToLine(InfluxDBLine& line, const std::string& group)
 	{
 		const auto& currentBatch = mBatchMeasurements[group];
+		std::vector<std::string> values;
 		for(const auto& metric : currentBatch)
 		{
 			std::string metricValue = "";
@@ -145,11 +143,10 @@ private:
 					[&metricValue](int arg) { metricValue = std::to_string(arg); },
 					[&metricValue](float arg) { metricValue = std::to_string(arg); },
 					}, metric.second());
-			//line.mFieldSet += metric.first + "=" + std::to_string(metric.second()) + ","s;
-			line.mFieldSet += metric.first + "=" + metricValue + ","s;
+			values.push_back(metric.first + "=" + metricValue);
 		}
 
-		line.mFieldSet.pop_back();
+		line.mFieldSet = fmt::format("{}", fmt::join(values, ","));
 	}
 
 	EventLoop::EventLoop& mEventLoop;
