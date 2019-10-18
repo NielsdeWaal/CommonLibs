@@ -123,6 +123,27 @@ public:
 						const std::string& label,
 						const std::function<std::variant<int,float>()> getter) noexcept;
 
+  /**
+   * @brief Sends state directly to TSDB
+   */
+  void SendFieldAndGroupImidiate(const std::string& group,
+                                const std::string& label,
+                                const std::variant<int,float>& value) const noexcept
+  {
+    InfluxDBLine line;
+
+    line.mTimestamp = std::chrono::high_resolution_clock::now();
+    line.mMeasurement = group;
+    std::visit(overloaded {
+        [&line, &label](int arg) { line.mFieldSet = label + "=" + std::to_string(arg); },
+        [&line, &label](float arg) { line.mFieldSet = label + "=" + std::to_string(arg); },
+        }, value);
+
+    const auto data = line.GetLine();
+    mLogger->info("Sending value: {} to {} now", line.mFieldSet, group);
+    mSocket.Send(data.c_str(), data.size(), mServerAddress.c_str(), mServerPort);
+  }
+
 private:
 	/**
 	 * @brief Sends batch of values to TSDB
