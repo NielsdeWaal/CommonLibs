@@ -10,7 +10,7 @@
 		-	Right now implemented using oneshot timer, check this for more clean approach
 -	{DONE} Stats output should include timer for measuring in between prints
 	-	https://github.com/fmtlib/fmt/releases/tag/5.3.0
--	UDP socket
+-	{DONE} UDP socket
 	-	Can lift from streamsocket
 -	Threadpool
 	-	Jobs get announced to the eventloop, upon each cycle jobs get distributed to the pool
@@ -24,4 +24,4 @@
 	-	PostgresQL
 -	Low-latency websockets
 	-	Websockets see an increase in usage accros the web, need way to quickly respond
--	InfluxDB writer
+-	{DONE} InfluxDB writer
