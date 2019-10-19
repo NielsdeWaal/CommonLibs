@@ -110,7 +110,7 @@ public:
 	 * - Template ref with name (e.g template<auto& var, string name>)
 	 */
 	void AddGroup(const std::string& label, const bool batch) noexcept;
-	
+
 	/**
 	 * @brief Add field to group for reporting
 	 *
@@ -142,6 +142,29 @@ public:
     const auto data = line.GetLine();
     mLogger->info("Sending value: {} to {} now", line.mFieldSet, group);
     mSocket.Send(data.c_str(), data.size(), mServerAddress.c_str(), mServerPort);
+  }
+
+  /**
+   * @brief Send values directly to TSDB
+   */
+  void SendFieldAndGroupImidiate(const std::string& group,
+                                 const std::unordered_map<std::string, std::variant<int,float>>& values) const noexcept
+  {
+    InfluxDBLine line;
+
+    line.mTimestamp = std::chrono::high_resolution_clock::now();
+    line.mMeasurement = group;
+    std::vector<std::string> formattedValues;
+    for(const auto& [metric,value] : values)
+    {
+			std::string metricValue = "";
+			std::visit(overloaded {
+					[&metricValue](int arg) { metricValue = std::to_string(arg); },
+          [&metricValue](float arg) { metricValue = std::to_string(arg); },
+              }, value);
+			formattedValues.push_back(metric+ "=" + metricValue);
+    }
+    line.mFieldSet = fmt::format("{}", fmt::join(formattedValues, ","));
   }
 
 private:
