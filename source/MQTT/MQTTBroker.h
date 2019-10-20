@@ -33,12 +33,7 @@ public:
 		: mEv(ev)
 		, mMQTTServer(mEv, this)
 	{
-		mLogger = spdlog::get("MQTTBroker");
-		if(mLogger == nullptr)
-		{
-			auto mqttclientlogger = spdlog::stdout_color_mt("MQTTBroker");
-			mLogger = spdlog::get("MQTTBroker");
-		}
+		mLogger = mEv.RegisterLogger("MQTTBroker");
 	}
 
 	void Initialise()

@@ -25,17 +25,12 @@ public:
 	//	: mAddress(addr)
 	//	, mPort(port)
 	//{}
-	
+
 	StreamSocket(EventLoop::EventLoop& ev, IStreamSocketHandler* handler) noexcept
 		: mEventLoop(ev)
 		, mHandler(handler)
 	{
-		mLogger = spdlog::get("StreamSocket");
-		if(mLogger == nullptr)
-		{
-			auto streamSocketLogger = spdlog::stdout_color_mt("StreamSocket");
-			mLogger = spdlog::get("StreamSocket");
-		}
+		mLogger = mEventLoop.RegisterLogger("StreamSocket");
 
 		mFd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 	}
@@ -144,7 +139,7 @@ private:
 		}
 		else if(mSendInProgress)
 		{
-			
+
 		}
 		else //TODO Make check for connection after sending data i.e check for ack
 		{
@@ -202,8 +197,7 @@ public:
 		: mEventLoop(ev)
 		, mHandler(handler)
 	{
-		auto streamSocketServer = spdlog::stdout_color_mt("StreamSocketServer");
-		mLogger = spdlog::get("StreamSocketServer");
+		mLogger = mEventLoop.RegisterLogger("StreamSocketServer");
 
 		mFd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 

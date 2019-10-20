@@ -67,12 +67,7 @@ public:
 		: mEventLoop(ev)
 		, mSocket(ev, this)
 	{
-		mLogger = spdlog::get("StatWriter");
-		if(mLogger == nullptr)
-		{
-			auto statWriterLogger = spdlog::stdout_color_mt("StatWriter");
-			mLogger = spdlog::get("StatWriter");
-		}
+		mLogger = mEventLoop.RegisterLogger("StatWriter");
 	}
 
 	void InfluxConnector(const std::string& addr, const uint16_t port) noexcept

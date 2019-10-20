@@ -30,12 +30,7 @@ public:
 		, mHandler(handler)
 		, mKeepAliveTimer(10s, EventLoop::EventLoop::TimerType::Repeating, [this](){ KeepAlive(); })
 	{
-		mLogger = spdlog::get("MQTTClient");
-		if(mLogger == nullptr)
-		{
-			auto mqttclientlogger = spdlog::stdout_color_mt("MQTTClient");
-			mLogger = spdlog::get("MQTTClient");
-		}
+		mLogger = mEv.RegisterLogger("MQTTClient");
 	}
 
 	~MQTTClient()
