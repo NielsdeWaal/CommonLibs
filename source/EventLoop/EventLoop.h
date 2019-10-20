@@ -15,6 +15,8 @@
 #include <spdlog/fmt/bin_to_hex.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
+#include <cpptoml.h>
+
 #include "Common/NonCopyable.h"
 
 namespace EventLoop {
@@ -116,6 +118,8 @@ public:
 		High = 1
 	};
 
+	void Configure();
+
 	void RegisterCallbackHandler(IEventLoopCallbackHandler* callback, LatencyType latency);
 	void RegisterFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler);
 	void ModifyFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler);
@@ -126,7 +130,10 @@ public:
 
 	void SheduleForNextCycle(const std::function<void()> func) noexcept;
 
-	void ToggleRunHot() noexcept;
+	void LoadConfig(const std::string& configFile) noexcept;
+
+	std::shared_ptr<spdlog::logger> RegisterLogger(const std::string& module) const noexcept;
+	std::shared_ptr<cpptoml::table> GetConfigTable(const std::string& module) const noexcept;
 
 private:
 	void PrintStatistics() noexcept;
@@ -137,10 +144,11 @@ private:
 
 	bool mStarted;
 	bool mStatistics;
+	int mStatTimerInterval;
 	Timer mStatsTimer;
 	long mCycleCount = 0;
 	std::chrono::high_resolution_clock::time_point mStatsTime;
-	bool mRunHot = true;
+	bool mRunHot;
 
 	std::vector<Timer*> mTimers;
 
@@ -163,6 +171,7 @@ private:
 
 	//int mTimerIterationCounter = 0;
 
+	std::shared_ptr<cpptoml::table> mConfig;
 	std::shared_ptr<spdlog::logger> mLogger;
 };
 

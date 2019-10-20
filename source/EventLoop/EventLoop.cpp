@@ -4,15 +4,9 @@ namespace EventLoop {
 
 EventLoop::EventLoop()
 	: mStarted(true)
-	, mStatsTimer(1s, TimerType::Repeating, [this](){ PrintStatistics(); })
 	, mEpollFd(::epoll_create1(EPOLL_CLOEXEC))
 {
-	mLogger = spdlog::get("EventLoop");
-	if(mLogger == nullptr)
-	{
-		const auto eventloopLogger = spdlog::stdout_color_mt("EventLoop");
-		mLogger = spdlog::get("EventLoop");
-	}
+	mLogger = RegisterLogger("EventLoop");
 
 	if(mEpollFd < 0)
 	{
@@ -21,6 +15,32 @@ EventLoop::EventLoop()
 	}
 
 	SetupSignalWatcher();
+}
+
+void EventLoop::Configure()
+{
+	auto config = GetConfigTable("EventLoop");
+	if(!config)
+	{
+		throw std::runtime_error("Failed to load config table");
+	}
+
+	auto statInterval = config->get_as<int>("StatInterval");
+	if(statInterval)
+	{
+		mStatTimerInterval = *statInterval;
+		EnableStatistics();
+	}
+
+	mRunHot = config->get_as<bool>("RunHot").value_or(false);
+	if(!mRunHot)
+	{
+		mEpollTimeout = 10;
+	}
+	else
+	{
+		mEpollTimeout = 0;
+	}
 }
 
 int EventLoop::Run()
@@ -222,6 +242,7 @@ bool EventLoop::IsRegistered(const int fd)
 
 void EventLoop::EnableStatistics() noexcept
 {
+	mStatsTimer = Timer(static_cast<std::chrono::seconds>(mStatTimerInterval), TimerType::Repeating, [this](){ PrintStatistics(); });
 	AddTimer(&mStatsTimer);
 	mStatistics = true;
 }
@@ -269,23 +290,40 @@ void EventLoop::SetupSignalWatcher()
 
 }
 
-void EventLoop::ToggleRunHot() noexcept
+void EventLoop::LoadConfig(const std::string& configFile) noexcept
 {
-	mRunHot = !mRunHot;
-	if(!mRunHot)
-	{
-		mEpollTimeout = 20;
-	}
-	else
-	{
-		mEpollTimeout = 0;
-	}
+	mConfig = cpptoml::parse_file(configFile);
 }
 
 void EventLoop::SheduleForNextCycle(const std::function<void()> func) noexcept
 {
 	mShortTimers.push_back(Timer(0s, TimerType::Oneshot, func));
 	AddTimer(&mShortTimers.back());
+}
+
+std::shared_ptr<spdlog::logger> EventLoop::RegisterLogger(const std::string& module) const noexcept
+{
+	std::shared_ptr<spdlog::logger> logger = spdlog::get(module);
+	if(logger == nullptr)
+	{
+		auto newLogger = spdlog::stdout_color_mt(module);
+		logger = spdlog::get(module);
+	}
+
+	return logger;
+}
+
+std::shared_ptr<cpptoml::table> EventLoop::GetConfigTable(const std::string& module) const noexcept
+{
+	const auto table = mConfig->get_table(module);
+
+	if(!table)
+	{
+		mLogger->critical("Failed to load config table for module: {}", module);
+		throw std::runtime_error("Failed to load config table");
+	}
+
+	return table;
 }
 
 }

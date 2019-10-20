@@ -5,6 +5,8 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
+#include <cpptoml.h>
+
 #include "EventLoop.h"
 
 #include "MQTT/MQTTClient.h"
@@ -31,12 +33,7 @@ public:
 		, mMQTTClient(mEv, this)
 		, mSW(mEv)
 	{
-		mLogger = spdlog::get("ExampleApp");
-		if(mLogger == nullptr)
-		{
-			auto exampleAppLogger = spdlog::stdout_color_mt("ExampleApp");
-			mLogger = spdlog::get("ExampleApp");
-		}
+		mLogger = mEv.RegisterLogger("ExampleApp");
 		//mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
 
 		mMQTTClient.Initialise("Client1", 60);
@@ -54,13 +51,20 @@ public:
 		//mServer.Shutdown();
 	}
 
+	void Configure()
+	{
+		auto exampleConfig = mEv.GetConfigTable("Example");
+		mMQTTPort = exampleConfig->get_as<int>("MQTTPort").value_or(1884);
+		mInfluxPort = exampleConfig->get_as<int>("InfluxPort").value_or(9555);
+	}
+
 	void Initialise()
 	{
 		mEv.AddTimer(&mTimer);
 		//mServer.BindAndListen(1337);
 		//mSocket.Connect("127.0.0.1", 1337);
-		mMQTTClient.Connect("127.0.0.1", 1883);
-		mSW.InfluxConnector("127.0.0.1", 9555);
+		mMQTTClient.Connect("127.0.0.1", mMQTTPort);
+		mSW.InfluxConnector("127.0.0.1", mInfluxPort);
 		mSW.SetBatchWriting(5s);
 	}
 
@@ -123,6 +127,7 @@ private:
 	//Common::StreamSocketServer mServer;
 	//Common::UDPSocket mUDPClient;
 	MQTT::MQTTClient mMQTTClient;
+	int mMQTTPort;
 
 	int mFd = 0;
 	char mSockBuf[100];
@@ -130,6 +135,7 @@ private:
 	std::string Teststring{"Test string"};
 
 	StatWriter::StatWriter mSW;
+	int mInfluxPort;
 	float mDebugMeasurementCounter = 0;
 	int mDebugMeasurementCounter1 = 8;
 

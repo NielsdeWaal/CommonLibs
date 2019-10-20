@@ -1,0 +1,7 @@
+[EventLoop]
+RunHot = true
+StatInterval = 1
+
+[Example]
+MQTTPort = 1883
+InfluxPort = 9555
