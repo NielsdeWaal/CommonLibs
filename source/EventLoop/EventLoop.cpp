@@ -306,7 +306,7 @@ std::shared_ptr<spdlog::logger> EventLoop::RegisterLogger(const std::string& mod
 	std::shared_ptr<spdlog::logger> logger = spdlog::get(module);
 	if(logger == nullptr)
 	{
-		auto exampleAppLogger = spdlog::stdout_color_mt(module);
+		auto newLogger = spdlog::stdout_color_mt(module);
 		logger = spdlog::get(module);
 	}
 
