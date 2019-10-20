@@ -315,7 +315,15 @@ std::shared_ptr<spdlog::logger> EventLoop::RegisterLogger(const std::string& mod
 
 std::shared_ptr<cpptoml::table> EventLoop::GetConfigTable(const std::string& module) const noexcept
 {
-	return mConfig->get_table(module);
+	const auto table = mConfig->get_table(module);
+
+	if(!table)
+	{
+		mLogger->critical("Failed to load config table for module: {}", module);
+		throw std::runtime_error("Failed to load config table");
+	}
+
+	return table;
 }
 
 }
