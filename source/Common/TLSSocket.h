@@ -57,16 +57,16 @@ public:
 
 		//TODO Handle error case
 		if((ret == -1) && (errno == EINPROGRESS))
-			{
-				//mLogger->critical("Connect failed, code:{}", ret);
-				//throw std::runtime_error("Connect failed");
-				mEventLoop.RegisterFiledescriptor(mFd, EPOLLIN | EPOLLOUT, this);
-			}
+		{
+			//mLogger->critical("Connect failed, code:{}", ret);
+			//throw std::runtime_error("Connect failed");
+			mEventLoop.RegisterFiledescriptor(mFd, EPOLLIN | EPOLLOUT, this);
+		}
 		else
-			{
-				mEventLoop.RegisterFiledescriptor(mFd, EPOLLIN, this);
-				mLogger->info("fd:{} connected instantly", mFd);
-			}
+		{
+			mEventLoop.RegisterFiledescriptor(mFd, EPOLLIN, this);
+			mLogger->info("fd:{} connected instantly", mFd);
+		}
 	}
 
 	void Send(const char* data, const size_t len) noexcept
