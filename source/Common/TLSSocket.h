@@ -32,7 +32,7 @@ public:
 
 		OpenSSL_add_all_algorithms();  /* Load cryptos, et.al. */
 		SSL_load_error_strings();   /* Bring in and register error messages */
-		mSSLMethod = TLSv1_2_client_method();  /* Create new client-method instance */
+		mSSLMethod = TLS_client_method();  /* Create new client-method instance */
 		mCTX = SSL_CTX_new(mSSLMethod);   /* Create new context */
 		if(!mCTX)
 		{
