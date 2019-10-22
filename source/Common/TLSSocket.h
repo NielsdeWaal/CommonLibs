@@ -17,6 +17,12 @@ public:
 	virtual ~ITLSSocketHandler() {}
 };
 
+/**
+ * @brief Async socket with TLS handling at both endpoints
+ *
+ * This socket will load openssl to use for TLS handling.
+ * Socket interface is equal to that of the StreamSocket.
+ */
 class TLSSocket : public EventLoop::IFiledescriptorCallbackHandler
 {
 public:
@@ -142,7 +148,8 @@ private:
 	{
     if(!mSSLConnected)
 		{
-			mLogger->warn("Read without sslconnected");
+			// We have to call SSL_connect again to see if the handshake has finished.
+			// When there is no error returned we know that our handshake has finished.
 			int ret = SSL_connect(mSSL);
 			if(ret < 0)
 			{
