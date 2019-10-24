@@ -178,6 +178,13 @@ private:
 			std::array<char, 512> readBuf = {0};
 			const auto len = SSL_read(mSSL, readBuf.data(), sizeof(readBuf));
 
+      const int err = SSL_get_error(mSSL, len);
+      if(err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE ||
+         err == SSL_ERROR_WANT_X509_LOOKUP)
+			{
+				return;
+			}
+
 			if(len == 0)
 			{
 				mLogger->info("Socket has been disconnected, closing filedescriptor. fd:{}", fd);
