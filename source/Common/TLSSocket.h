@@ -80,7 +80,15 @@ public:
 		if(mConnected)
 		{
 			//::send(mFd, data, len, MSG_DONTWAIT);
-			int ret = SSL_write(mSSL, data, len);
+			const int ret = SSL_write(mSSL, data, len);
+			if(ret <= 0)
+			{
+				mLogger->error("Unable to send data, closing socket");
+				mConnected = false;
+				mSSLConnected = false;
+				mHandler->OnDisconnect(this);
+				::close(mFd);
+			}
 		}
 		else
 		{
@@ -103,7 +111,7 @@ private:
 					mEventLoop.ModifyFiledescriptor(fd, EPOLLIN | EPOLLRDHUP, this);
 					mConnected = true;
 					mLogger->info("Connection establisched on fd:{}, staring SSL handshake", fd);
-					int ret = SSL_connect(mSSL);
+					const int ret = SSL_connect(mSSL);
 					if(ret < 0)
 					{
 						err = SSL_get_error(mSSL, ret);
@@ -150,10 +158,10 @@ private:
 		{
 			// We have to call SSL_connect again to see if the handshake has finished.
 			// When there is no error returned we know that our handshake has finished.
-			int ret = SSL_connect(mSSL);
+			const int ret = SSL_connect(mSSL);
 			if(ret < 0)
 			{
-				int err = SSL_get_error(mSSL, ret);
+				const int err = SSL_get_error(mSSL, ret);
 				if(err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE ||
 					 err == SSL_ERROR_WANT_X509_LOOKUP)
 				{
