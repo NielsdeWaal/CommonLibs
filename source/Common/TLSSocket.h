@@ -52,6 +52,14 @@ public:
 
 	}
 
+	~TLSSocket()
+	{
+		if(mConnected && mSSLConnected)
+		{
+			Shutdown();
+		}
+	}
+
 	void Connect(const char* addr, const uint16_t port) noexcept
 	{
 		remote.sin_addr.s_addr = ::inet_addr(addr);
@@ -96,6 +104,31 @@ public:
 		}
 	}
 
+	void Shutdown() noexcept
+	{
+		if(mConnected && mSSLConnected)
+		{
+			const int ret = SSL_shutdown(mSSL);
+			if(ret == 0)
+			{
+				mLogger->debug("SSL shutdown initiated, will complete at a later point in time");
+				return;
+			}
+			else if(ret == 1)
+			{
+				mEventLoop.UnregisterFiledescriptor(mFd);
+				mSSLConnected = false;
+				mConnected = false;
+				::close(mFd);
+				return;
+			}
+			else
+			{
+				mSSLShutdownRunning = true;
+			}
+		}
+	}
+
 private:
 	void OnFiledescriptorWrite(int fd) final
 	{
@@ -110,7 +143,7 @@ private:
 				{
 					mEventLoop.ModifyFiledescriptor(fd, EPOLLIN | EPOLLRDHUP, this);
 					mConnected = true;
-					mLogger->info("Connection establisched on fd:{}, staring SSL handshake", fd);
+					mLogger->info("Connection establisched on fd:{}, starting SSL handshake", fd);
 					const int ret = SSL_connect(mSSL);
 					if(ret < 0)
 					{
@@ -178,9 +211,9 @@ private:
 			std::array<char, 512> readBuf = {0};
 			const auto len = SSL_read(mSSL, readBuf.data(), sizeof(readBuf));
 
-      const int err = SSL_get_error(mSSL, len);
-      if(err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE ||
-         err == SSL_ERROR_WANT_X509_LOOKUP)
+			const int err = SSL_get_error(mSSL, len);
+			if(err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE ||
+				 err == SSL_ERROR_WANT_X509_LOOKUP)
 			{
 				return;
 			}
@@ -206,6 +239,7 @@ private:
 	struct sockaddr_in remote;
 	bool mConnected = false;
 	bool mSSLConnected = false;
+	bool mSSLShutdownRunning = false;
 
 	//SSL/TLS relevant members
 	const SSL_METHOD *mSSLMethod;
