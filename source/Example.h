@@ -19,8 +19,8 @@
 using namespace std::chrono_literals;
 
 class ExampleApp : public EventLoop::IEventLoopCallbackHandler
-//, public Common::ITLSSocketHandler
-				 , public Common::IStreamSocketHandler
+, public Common::ITLSSocketHandler
+//, public Common::IStreamSocketHandler
 				 //, public Common::IStreamSocketServerHandler
 				 //, public Common::IUDPSocketHandler
 				//, public MQTT::IMQTTClientHandler
@@ -64,9 +64,9 @@ public:
 	{
 		mEv.AddTimer(&mTimer);
 		//mServer.BindAndListen(1337);
-		mSocket.Connect("127.0.0.1", 1337);
+		//mSocket.Connect("127.0.0.1", 1337);
 		//mSocket.Connect("174.129.224.73", 443);
-		//mSocket.Connect("127.0.0.1", 31337);
+		mSocket.Connect("127.0.0.1", 31337);
 		//mMQTTClient.Connect("127.0.0.1", mMQTTPort);
 		mSW.InfluxConnector("127.0.0.1", mInfluxPort);
 		mSW.SetBatchWriting(5s);
@@ -75,7 +75,7 @@ public:
 	void OnTimerCallback()
 	{
 		//mLogger->info("Got callback from timer");
-		mSocket.Send(WebSocketString.c_str(), WebSocketString.size());
+		mSocket.Send(Teststring.c_str(), Teststring.size());
 		//mUDPClient.Send(Teststring.c_str(), Teststring.size(), "127.0.0.1", 9999);
 		//if(mMQTTClient.IsConnected())
 		//{
@@ -101,14 +101,14 @@ public:
 	}
 
 	//void OnDisconnect(MQTT::MQTTClient* conn) final
-	//void OnDisconnect(Common::TLSSocket* conn) final
-	void OnDisconnect(Common::StreamSocket* conn) final
+	void OnDisconnect(Common::TLSSocket* conn) final
+	//void OnDisconnect(Common::StreamSocket* conn) final
 	{
 		mLogger->warn("Connection terminated");
 	}
 
-	//void OnIncomingData(Common::TLSSocket* conn, char* data, size_t len) final
-	void OnIncomingData(Common::StreamSocket* conn, char* data, size_t len) final
+	void OnIncomingData(Common::TLSSocket* conn, char* data, size_t len) final
+	//void OnIncomingData(Common::StreamSocket* conn, char* data, size_t len) final
 	{
 		mLogger->info("Incoming: {}", std::string{data});
 		//conn->Send(data, len);
@@ -130,9 +130,9 @@ private:
 	EventLoop::EventLoop& mEv;
 	EventLoop::EventLoop::Timer mTimer;
 
-	Common::StreamSocket mSocket;
+	//Common::StreamSocket mSocket;
 	//Common::StreamSocketServer mServer;
-	//Common::TLSSocket mSocket;
+	Common::TLSSocket mSocket;
 	//Common::UDPSocket mUDPClient;
 	//MQTT::MQTTClient mMQTTClient;
 	//int mMQTTPort;
@@ -141,7 +141,6 @@ private:
 	char mSockBuf[100];
 
 	std::string Teststring{"Test string"};
-	std::string WebSocketString{"GET /chat HTTP/1.1\r\nHost: server.example.com\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==\r\nSec-WebSocket-Protocol: chat, superchat\r\nSec-WebSocket-Version: 13\r\nOrigin: http://example.com\r\n"};
 
 	StatWriter::StatWriter mSW;
 	int mInfluxPort;
