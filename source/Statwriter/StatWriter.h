@@ -58,6 +58,9 @@ private:
 			}
 			ret += mFieldSet;
 
+			ret += " ";
+			ret += std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(mTimestamp.time_since_epoch()).count());
+
 			return ret;
 		}
 	};
