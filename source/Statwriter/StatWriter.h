@@ -98,6 +98,17 @@ public:
 		mTimerSet = true;
 	}
 
+	void AddMultipleToGroupInBatch(const std::string& group,
+													const std::unordered_map<std::string,
+														std::function<std::variant<int,float>()>>& getters) noexcept
+	{
+		for(const auto& [label, getter] : getters)
+		{
+			mBatchMeasurements[group][label] = getter;
+			mLogger->info("Added field: {} to group: {}", label, group);
+		}
+	}
+
 	/**
 	 * @brief Add variable to timed batch
 	 *
