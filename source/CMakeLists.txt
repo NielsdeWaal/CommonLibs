@@ -46,6 +46,7 @@ add_executable(CommonLibs
 	EventLoop/EventLoop.h
 	Common/StreamSocket.h
 	Common/UDPSocket.h
+  Common/Websocket.h
 	MQTT/MQTTPacket.h
 	MQTT/MQTTClient.h
 	MQTT/MQTTBroker.h
