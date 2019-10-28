@@ -161,25 +161,25 @@ public:
   /**
    * @brief Send values directly to TSDB
    */
-  void SendFieldAndGroupImidiate(const std::string& group,
-                                 const std::unordered_map<std::string, std::variant<int,float>>& values) const noexcept
-  {
-    InfluxDBLine line;
+	void SendFieldAndGroupImidiate(const std::string& group,
+																 const std::unordered_map<std::string, std::variant<int,float>>& values) const noexcept
+	{
+		InfluxDBLine line;
 
-    line.mTimestamp = std::chrono::high_resolution_clock::now();
-    line.mMeasurement = group;
-    std::vector<std::string> formattedValues;
-    for(const auto& [metric,value] : values)
-    {
+		line.mTimestamp = std::chrono::high_resolution_clock::now();
+		line.mMeasurement = group;
+		std::vector<std::string> formattedValues;
+		for(const auto& [metric,value] : values)
+		{
 			std::string metricValue = "";
 			std::visit(overloaded {
 					[&metricValue](int arg) { metricValue = std::to_string(arg); },
-          [&metricValue](float arg) { metricValue = std::to_string(arg); },
-              }, value);
+					[&metricValue](float arg) { metricValue = std::to_string(arg); },
+						}, value);
 			formattedValues.push_back(metric+ "=" + metricValue);
-    }
-    line.mFieldSet = fmt::format("{}", fmt::join(formattedValues, ","));
-  }
+		}
+		line.mFieldSet = fmt::format("{}", fmt::join(formattedValues, ","));
+	}
 
 private:
 	/**
