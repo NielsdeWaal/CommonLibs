@@ -74,7 +74,7 @@ public:
 			mMQTTClient.Publish("test/TestTopic", "TestMessageFromCommonLibs");
 		}
 
-    mSW.SendFieldAndGroupImidiate("IMDEBUG", "Debug3", [this]() -> int { mDebugMeasurementCounter1++; return mDebugMeasurementCounter1;}());
+		mSW.SendFieldAndGroupImidiate("IMDEBUG", "Debug3", [this]() -> int { mDebugMeasurementCounter1++; return mDebugMeasurementCounter1;}());
 	}
 
 	void OnNextCycle()
