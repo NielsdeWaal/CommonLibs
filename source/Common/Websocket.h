@@ -7,20 +7,27 @@ namespace Common {
 
 using namespace EventLoop;
 
+template<typename SocketType>
 class WebsocketClient;
 
+template<typename SocketType>
 class IWebsocketClientHandler
 {
+private:
+	static_assert(std::is_same<Common::StreamSocket, SocketType>::value, "SocketType is not compatible with websocket");
 public:
 	virtual void OnConnected() = 0;
-	virtual void OnDisconnect(WebsocketClient* conn) = 0;
-	virtual void OnIncomingData(WebsocketClient* conn, char* data, size_t len) = 0;
+	virtual void OnDisconnect(WebsocketClient<SocketType>* conn) = 0;
+	virtual void OnIncomingData(WebsocketClient<SocketType>* conn, char* data, size_t len) = 0;
 	virtual ~IWebsocketClientHandler() {}
 };
 
+template<typename SocketType>
 class WebsocketClient : public Common::IStreamSocketHandler
 {
 private:
+	static_assert(std::is_same<Common::StreamSocket, SocketType>::value, "SocketType is not compatible with websocket");
+
 	enum class Opcode : std::uint8_t
 	{
 		CONTINUATION = 0,
@@ -39,7 +46,7 @@ private:
 */
 
 public:
-	WebsocketClient(EventLoop::EventLoop& ev, IWebsocketClientHandler* handler) noexcept
+	WebsocketClient(EventLoop::EventLoop& ev, IWebsocketClientHandler<SocketType>* handler) noexcept
 		: mEventLoop(ev)
 		, mHandler(handler)
 		, mSocket(ev, this)
@@ -60,12 +67,12 @@ public:
 		StartWebsocketConnection();
 	}
 
-	void OnDisconnect(StreamSocket* conn)
+	void OnDisconnect(SocketType* conn)
 	{
 		mLogger->warn("Connection to TCP endpoint closed");
 	}
 
-	void OnIncomingData(StreamSocket* conn, char* data, size_t len)
+	void OnIncomingData(SocketType* conn, char* data, size_t len)
 	{
 		std::string payload{data+2, data[1]&127};
 		mLogger->info("Incoming payload data: {}", payload);
@@ -119,9 +126,9 @@ public:
 
 private:
 	EventLoop::EventLoop& mEventLoop;
-	IWebsocketClientHandler* mHandler;
+	IWebsocketClientHandler<SocketType>* mHandler;
 
-	Common::StreamSocket mSocket;
+	SocketType mSocket;
 
 	uint16_t mPort;
 	std::string mAddress;
