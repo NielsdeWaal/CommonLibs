@@ -66,17 +66,36 @@ public:
 	}
 
 	void OnIncomingData(StreamSocket* conn, char* data, size_t len)
-	{}
+	{
+		std::string payload{data+2, data[1]&127};
+		mLogger->info("Incoming payload data: {}", payload);
+	}
 
 	void Send(const char* data, const size_t len)
 	{
+		const std::vector<char> maskingKey{0x12, 0x34, 0x56, 0x78};
 		std::vector<char> header;
-		std::string payload(data, len);
-		header.push_back(0x80 | static_cast<int>(Opcode::TEXT));
+		//header.assign(2 + (len >= 126 ? 2 : 0) + (len >= 65536 ? 6 : 0) + 4, 0);
+		header.assign(2 + (len >= 126 ? 2 : 0) + (len >= 65536 ? 6 : 0) , 0);
 
-		header.push_back((len & 0xff) | (0x0));
+		std::string payload;
+		//payload.assign(len, 0);
+		const char* startPointer = data;
+		const char* endPointer = startPointer + len;
 
-		header.insert(std::end(header), std::begin(payload), std::end(payload));
+		header[0] = 0x80 | static_cast<int>(Opcode::TEXT);
+
+		header[1] = (len & 0xff) | (0x80);
+		header.insert(std::begin(header)+2, std::begin(maskingKey), std::end(maskingKey));
+
+		//FIXME
+		//Ugly as sin but it should work
+		int i = 0;
+		while(startPointer != endPointer)
+		{
+			payload.push_back((*startPointer++) ^ maskingKey[i++ % 4]);
+		}
+		header.insert(std::begin(header)+2+maskingKey.size(), std::begin(payload), std::end(payload));
 
 		mSocket.Send(header.data(), header.size());
 	}
