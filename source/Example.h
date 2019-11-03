@@ -19,10 +19,10 @@
 using namespace std::chrono_literals;
 
 class ExampleApp : public EventLoop::IEventLoopCallbackHandler
-, public Common::ITLSSocketHandler
-//, public Common::IStreamSocketHandler
-				 //, public Common::IStreamSocketServerHandler
-				 //, public Common::IUDPSocketHandler
+				, public Common::ITLSSocketHandler
+				//, public Common::IStreamSocketHandler
+				//, public Common::IStreamSocketServerHandler
+				//, public Common::IUDPSocketHandler
 				//, public MQTT::IMQTTClientHandler
 {
 public:
