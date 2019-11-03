@@ -38,12 +38,15 @@ private:
 		PONG = 10,
 	};
 
-/*
-	struct WebsocketPacket
-	{
-
+	struct WebsocketHeader {
+		unsigned int mHeaderLength;
+		bool mFin;
+		bool mIsMasked;
+		Opcode mOpcode;
+		int mInitialLength;
+		uint64_t mExtendedLength;
+		uint8_t mMask[4];
 	};
-*/
 
 public:
 	WebsocketClient(EventLoop::EventLoop& ev, IWebsocketClientHandler<SocketType>* handler) noexcept
@@ -74,19 +77,65 @@ public:
 
 	void OnIncomingData(SocketType* conn, char* data, size_t len)
 	{
-		std::string payload{data+2, data[1]&127};
-		mLogger->info("Incoming payload data: {}", payload);
+		//FIXME Needs actual HTTP request handling instead of just looking at the first character
+		if(data[0] == 'H')
+		{
+			mLogger->info("Connection with websocket server established");
+			mHandler->OnConnected();
+			mConnected = true;
+			return;
+		}
+
+		WebsocketHeader header;
+		header.mFin = (data[0] & 0x80) == 0x80;
+		header.mOpcode = static_cast<Opcode>((data[0] & 0x0f));
+		header.mIsMasked = (data[1] & 0x80) == 0x80;
+		header.mInitialLength = (data[1] & 0x7f);
+		header.mHeaderLength = 2 // Opcode and reserved bits
+			+ (header.mInitialLength == 126? 2 : 0) // Standard length
+			+ (header.mInitialLength == 127? 8 : 0) // Extended length
+			+ (header.mIsMasked? 4 : 0); // Masking key
+
+		size_t headerOffset = 0;
+
+		if(!(header.mInitialLength < 126))
+		{
+			mLogger->warn("Incoming packet is too big for handling");
+		}
+
+		headerOffset = 2;
+
+		if(header.mIsMasked)
+		{
+			header.mMask[0] = (static_cast<uint8_t>(data[headerOffset+0])) << 0;
+			header.mMask[1] = (static_cast<uint8_t>(data[headerOffset+1])) << 0;
+			header.mMask[2] = (static_cast<uint8_t>(data[headerOffset+2])) << 0;
+			header.mMask[3] = (static_cast<uint8_t>(data[headerOffset+3])) << 0;
+		}
+
+		if(header.mOpcode == Opcode::TEXT
+		|| header.mOpcode == Opcode::BINARY
+		|| header.mOpcode == Opcode::CONTINUATION)
+		{
+			if(header.mFin)
+			{
+				mHandler->OnIncomingData(this, data+header.mHeaderLength, header.mInitialLength);
+			}
+		}
 	}
 
 	void Send(const char* data, const size_t len)
 	{
+		if(!mConnected)
+		{
+			mLogger->warn("Attempted to send while not connected");
+			return;
+		}
 		const std::vector<char> maskingKey{0x12, 0x34, 0x56, 0x78};
 		std::vector<char> header;
-		//header.assign(2 + (len >= 126 ? 2 : 0) + (len >= 65536 ? 6 : 0) + 4, 0);
 		header.assign(2 + (len >= 126 ? 2 : 0) + (len >= 65536 ? 6 : 0) , 0);
 
 		std::string payload;
-		//payload.assign(len, 0);
 		const char* startPointer = data;
 		const char* endPointer = startPointer + len;
 
@@ -132,6 +181,8 @@ private:
 
 	uint16_t mPort;
 	std::string mAddress;
+
+	bool mConnected;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
