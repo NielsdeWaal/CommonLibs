@@ -78,7 +78,7 @@ public:
 	void OnIncomingData(SocketType* conn, char* data, size_t len)
 	{
 		//FIXME Needs actual HTTP request handling instead of just looking at the first character
-		if(data[0] == 'H')
+		if(data[0] == 'H' && !mConnected)
 		{
 			mLogger->info("Connection with websocket server established");
 			mHandler->OnConnected();
@@ -92,8 +92,8 @@ public:
 		header.mIsMasked = (data[1] & 0x80) == 0x80;
 		header.mInitialLength = (data[1] & 0x7f);
 		header.mHeaderLength = 2 // Opcode and reserved bits
-			+ (header.mInitialLength == 126? 2 : 0) // Standard length
-			+ (header.mInitialLength == 127? 8 : 0) // Extended length
+			+ (header.mInitialLength == 126 ? 2 : 0) // Standard length
+			+ (header.mInitialLength == 127 ? 8 : 0) // Extended length
 			+ (header.mIsMasked? 4 : 0); // Masking key
 
 		size_t headerOffset = 0;
