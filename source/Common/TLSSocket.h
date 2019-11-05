@@ -136,7 +136,7 @@ private:
 		{
 			int err = 0;
 			socklen_t len = sizeof(int);
-			int status = ::getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len);
+			const int status = ::getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len);
 			if (status != -1)
 			{
 				if (err == 0)
@@ -166,10 +166,10 @@ private:
 		}
 		else if(!mSSLConnected)
 		{
-			int ret = SSL_connect(mSSL);
+			const int ret = SSL_connect(mSSL);
 			if(ret < 0)
 			{
-				auto err = SSL_get_error(mSSL, ret);
+				const auto err = SSL_get_error(mSSL, ret);
 				if(err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE ||
 					 err == SSL_ERROR_WANT_X509_LOOKUP)
 				{
@@ -187,7 +187,7 @@ private:
 
 	void OnFiledescriptorRead(int fd) final
 	{
-    if(!mSSLConnected)
+		if(!mSSLConnected)
 		{
 			// We have to call SSL_connect again to see if the handshake has finished.
 			// When there is no error returned we know that our handshake has finished.
