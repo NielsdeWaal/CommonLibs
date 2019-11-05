@@ -58,6 +58,9 @@ private:
 			}
 			ret += mFieldSet;
 
+			ret += " ";
+			ret += std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(mTimestamp.time_since_epoch()).count());
+
 			return ret;
 		}
 	};
@@ -93,6 +96,17 @@ public:
 		mTimerSet = true;
 	}
 
+	void AddMultipleToGroupInBatch(const std::string& group,
+								const std::unordered_map<std::string,
+								std::function<std::variant<int,float>()>>& getters) noexcept
+	{
+		for(const auto& [label, getter] : getters)
+		{
+			mBatchMeasurements[group][label] = getter;
+			mLogger->info("Added field: {} to group: {}", label, group);
+		}
+	}
+
 	/**
 	 * @brief Add variable to timed batch
 	 *
@@ -105,7 +119,7 @@ public:
 	 * - Template ref with name (e.g template<auto& var, string name>)
 	 */
 	void AddGroup(const std::string& label, const bool batch) noexcept;
-	
+
 	/**
 	 * @brief Add field to group for reporting
 	 *
@@ -117,6 +131,50 @@ public:
 	void AddFieldToGroup(const std::string& group,
 						const std::string& label,
 						const std::function<std::variant<int,float>()> getter) noexcept;
+
+  /**
+   * @brief Sends state directly to TSDB
+   */
+	void SendFieldAndGroupImidiate(const std::string& group,
+									const std::string& label,
+									const std::variant<int,float>& value) const noexcept
+	{
+		InfluxDBLine line;
+
+		line.mTimestamp = std::chrono::high_resolution_clock::now();
+		line.mMeasurement = group;
+		std::visit(overloaded {
+				[&line, &label](int arg) { line.mFieldSet = label + "=" + std::to_string(arg); },
+				[&line, &label](float arg) { line.mFieldSet = label + "=" + std::to_string(arg); },
+				}, value);
+
+		const auto data = line.GetLine();
+		mLogger->info("Sending value: {} to {} now", line.mFieldSet, group);
+		mSocket.Send(data.c_str(), data.size(), mServerAddress.c_str(), mServerPort);
+	}
+
+  /**
+   * @brief Send values directly to TSDB
+   */
+	void SendFieldAndGroupImidiate(const std::string& group,
+								 const std::unordered_map<std::string, std::variant<int,float>>& values) const noexcept
+	{
+		InfluxDBLine line;
+
+		line.mTimestamp = std::chrono::high_resolution_clock::now();
+		line.mMeasurement = group;
+		std::vector<std::string> formattedValues;
+		for(const auto& [metric,value] : values)
+		{
+			std::string metricValue = "";
+			std::visit(overloaded {
+					[&metricValue](int arg) { metricValue = std::to_string(arg); },
+					[&metricValue](float arg) { metricValue = std::to_string(arg); },
+						}, value);
+			formattedValues.push_back(metric+ "=" + metricValue);
+		}
+		line.mFieldSet = fmt::format("{}", fmt::join(formattedValues, ","));
+	}
 
 private:
 	/**

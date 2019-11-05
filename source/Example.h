@@ -11,6 +11,7 @@
 
 #include "MQTT/MQTTClient.h"
 #include "StreamSocket.h"
+#include "TLSSocket.h"
 #include "UDPSocket.h"
 #include "Websocket.h"
 
@@ -24,7 +25,8 @@ class ExampleApp : public EventLoop::IEventLoopCallbackHandler
 				 //, public Common::IStreamSocketServerHandler
 				 //, public Common::IUDPSocketHandler
 //, public MQTT::IMQTTClientHandler
-, public Common::IWebsocketClientHandler<Common::StreamSocket>
+						, public Common::IWebsocketClientHandler<Common::StreamSocket>
+	//, public Common::ITLSSocketHandler
 {
 public:
 	ExampleApp(EventLoop::EventLoop& ev)
@@ -58,7 +60,7 @@ public:
 	void Configure()
 	{
 		auto exampleConfig = mEv.GetConfigTable("Example");
-		mMQTTPort = exampleConfig->get_as<int>("MQTTPort").value_or(1884);
+		//mMQTTPort = exampleConfig->get_as<int>("MQTTPort").value_or(1884);
 		mInfluxPort = exampleConfig->get_as<int>("InfluxPort").value_or(9555);
 	}
 
@@ -68,15 +70,18 @@ public:
 		//mServer.BindAndListen(1337);
 		//mSocket.Connect("127.0.0.1", 1337);
 		mWebsocket.Connect("127.0.0.1", 1337);
+		//mSocket.Connect("174.129.224.73", 443);
+		//mSocket.Connect("127.0.0.1", 31337);
 		//mMQTTClient.Connect("127.0.0.1", mMQTTPort);
-		//mSW.InfluxConnector("127.0.0.1", mInfluxPort);
-		//mSW.SetBatchWriting(5s);
+		mSW.InfluxConnector("127.0.0.1", mInfluxPort);
+		mSW.SetBatchWriting(5s);
 	}
 
 	void OnTimerCallback()
 	{
 		//mLogger->info("Got callback from timer");
 		//mSocket.Send(Teststring.c_str(), Teststring.size());
+		mWebsocket.Send(Teststring.c_str(), Teststring.size());
 		//mUDPClient.Send(Teststring.c_str(), Teststring.size(), "127.0.0.1", 9999);
 		//if(mMQTTClient.IsConnected())
 		//{
@@ -103,19 +108,22 @@ public:
 
 	//void OnDisconnect(MQTT::MQTTClient* conn) final
 	void OnDisconnect(websocketClient* conn) final
+	//void OnDisconnect(Common::TLSSocket* conn) final
+	//void OnDisconnect(Common::StreamSocket* conn) final
 	{
 		mLogger->warn("Connection terminated");
 	}
 
+	//void OnIncomingData(Common::TLSSocket* conn, char* data, size_t len) final
 	//void OnIncomingData(Common::StreamSocket* conn, char* data, size_t len) final
 	void OnIncomingData(websocketClient* conn, char* data, size_t len) final
 	{
-		mLogger->info("Incoming: {}", std::string(data));
+		mLogger->info("Incoming: {}", std::string{data});
 		//conn->Send(data, len);
 		//mEv.SheduleForNextCycle([this](){OnNextCycle();});
 	}
 
-	//Common::IStreamSocketHandler* OnIncomingConnection() final
+	//Common::ITLSSocketHandler* OnIncomingConnection() final
 	//{
 	//	return this;
 	//}
@@ -133,9 +141,10 @@ private:
 	//Common::StreamSocket mSocket;
 	websocketClient mWebsocket;
 	//Common::StreamSocketServer mServer;
+	//Common::TLSSocket mSocket;
 	//Common::UDPSocket mUDPClient;
 	//MQTT::MQTTClient mMQTTClient;
-	int mMQTTPort;
+	//int mMQTTPort;
 
 	int mFd = 0;
 	char mSockBuf[100];
