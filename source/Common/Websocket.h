@@ -7,26 +7,28 @@ namespace Common {
 
 using namespace EventLoop;
 
-template<typename SocketType>
+template<typename SocketType, typename Handler>
 class WebsocketClient;
 
-template<typename SocketType>
+template<typename SocketType, typename Handler>
 class IWebsocketClientHandler
 {
 private:
-	static_assert(std::is_same<Common::StreamSocket, SocketType>::value, "SocketType is not compatible with websocket");
+	static_assert(std::is_same_v<Common::StreamSocket, SocketType> || std::is_same_v<Common::TLSSocket, SocketType>, "SocketType is not compatible with websocket");
+	//static_assert(std::is_same_v<Common::TLSSocket, SocketType>, "SocketType is not compatible with websocket");
 public:
 	virtual void OnConnected() = 0;
-	virtual void OnDisconnect(WebsocketClient<SocketType>* conn) = 0;
-	virtual void OnIncomingData(WebsocketClient<SocketType>* conn, char* data, size_t len) = 0;
+	virtual void OnDisconnect(WebsocketClient<SocketType, Handler>* conn) = 0;
+	virtual void OnIncomingData(WebsocketClient<SocketType, Handler>* conn, char* data, size_t len) = 0;
 	virtual ~IWebsocketClientHandler() {}
 };
 
-template<typename SocketType>
-class WebsocketClient : public Common::IStreamSocketHandler
+template<typename SocketType, typename Handler>
+class WebsocketClient : public Handler
 {
 private:
-	static_assert(std::is_same<Common::StreamSocket, SocketType>::value, "SocketType is not compatible with websocket");
+	static_assert(std::is_same_v<Common::StreamSocket, SocketType> || std::is_same_v<Common::TLSSocket, SocketType>, "SocketType is not compatible with websocket");
+	//static_assert(std::is_same_v<Common::TLSSocket, SocketType>, "SocketType is not compatible with websocket");
 
 	enum class Opcode : std::uint8_t
 	{
@@ -49,8 +51,7 @@ private:
 	};
 
 public:
-	WebsocketClient(EventLoop::EventLoop& ev, IWebsocketClientHandler<SocketType>* handler) noexcept
-		: mEventLoop(ev)
+	WebsocketClient(EventLoop::EventLoop& ev, IWebsocketClientHandler<SocketType, Handler>* handler) noexcept : mEventLoop(ev)
 		, mHandler(handler)
 		, mSocket(ev, this)
 	{
@@ -175,7 +176,7 @@ public:
 
 private:
 	EventLoop::EventLoop& mEventLoop;
-	IWebsocketClientHandler<SocketType>* mHandler;
+	IWebsocketClientHandler<SocketType, Handler>* mHandler;
 
 	SocketType mSocket;
 

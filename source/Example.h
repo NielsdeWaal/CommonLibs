@@ -18,15 +18,15 @@
 #include "Statwriter/StatWriter.h"
 
 using namespace std::chrono_literals;
-using websocketClient = Common::WebsocketClient<Common::StreamSocket>;
+using websocketClient = Common::WebsocketClient<Common::TLSSocket,Common::ITLSSocketHandler>;
 
 class ExampleApp : public EventLoop::IEventLoopCallbackHandler
-				 //, public Common::IStreamSocketHandler
-				 //, public Common::IStreamSocketServerHandler
-				 //, public Common::IUDPSocketHandler
-//, public MQTT::IMQTTClientHandler
-						, public Common::IWebsocketClientHandler<Common::StreamSocket>
-	//, public Common::ITLSSocketHandler
+					//, public Common::IStreamSocketHandler
+					//, public Common::IStreamSocketServerHandler
+					//, public Common::IUDPSocketHandler
+					//, public MQTT::IMQTTClientHandler
+						, public Common::IWebsocketClientHandler<Common::TLSSocket,Common::ITLSSocketHandler>
+					//, public Common::ITLSSocketHandler
 {
 public:
 	ExampleApp(EventLoop::EventLoop& ev)
