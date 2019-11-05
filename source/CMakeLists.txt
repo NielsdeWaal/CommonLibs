@@ -45,6 +45,7 @@ add_executable(CommonLibs
 	EventLoop/EventLoop.cpp
 	EventLoop/EventLoop.h
 	Common/StreamSocket.h
+	Common/TLSSocket.h
 	Common/UDPSocket.h
 	MQTT/MQTTPacket.h
 	MQTT/MQTTClient.h
@@ -111,8 +112,8 @@ add_custom_target(run DEPENDS CommonLibs-run)
 # find_package(ZLIB REQUIRED) 
 # target_link_libraries (CommonLibs PRIVATE ZLIB::ZLIB)
 # 
-# find_package(OpenSSL REQUIRED)
-# target_link_libraries (CommonLibs PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+find_package(OpenSSL REQUIRED)
+target_link_libraries (CommonLibs PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 #
 # find_package(CURL REQUIRED)
 # target_link_libraries (CommonLibs PRIVATE CURL::libcurl)
