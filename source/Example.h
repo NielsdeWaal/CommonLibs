@@ -25,19 +25,18 @@ class ExampleApp : public EventLoop::IEventLoopCallbackHandler
 					//, public Common::IStreamSocketServerHandler
 					//, public Common::IUDPSocketHandler
 					//, public MQTT::IMQTTClientHandler
-						, public Common::IWebsocketClientHandler<Common::TLSSocket,Common::ITLSSocketHandler>
+					, public Common::IWebsocketClientHandler<Common::TLSSocket,Common::ITLSSocketHandler>
 					//, public Common::ITLSSocketHandler
 {
 public:
 	ExampleApp(EventLoop::EventLoop& ev)
 		: mEv(ev)
 		, mTimer(1s, EventLoop::EventLoop::TimerType::Repeating, [this](){ OnTimerCallback(); })
-		//, mSocket(mEv, this)
+		, mSocket(mEv, this)
 		//, mServer(mEv, this)
 		//, mUDPClient(mEv, this)
 		//, mMQTTClient(mEv, this)
 		, mSW(mEv)
-		, mWebsocket(mEv, this)
 	{
 		mLogger = mEv.RegisterLogger("ExampleApp");
 		//mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
@@ -69,8 +68,8 @@ public:
 		mEv.AddTimer(&mTimer);
 		//mServer.BindAndListen(1337);
 		//mSocket.Connect("127.0.0.1", 1337);
-		mWebsocket.Connect("127.0.0.1", 1337);
-		//mSocket.Connect("174.129.224.73", 443);
+		//mWebsocket.Connect("127.0.0.1", 1337);
+		mSocket.Connect("174.129.224.73", 443);
 		//mSocket.Connect("127.0.0.1", 31337);
 		//mMQTTClient.Connect("127.0.0.1", mMQTTPort);
 		mSW.InfluxConnector("127.0.0.1", mInfluxPort);
@@ -80,8 +79,8 @@ public:
 	void OnTimerCallback()
 	{
 		//mLogger->info("Got callback from timer");
-		//mSocket.Send(Teststring.c_str(), Teststring.size());
-		mWebsocket.Send(Teststring.c_str(), Teststring.size());
+		mSocket.Send(Teststring.c_str(), Teststring.size());
+		//mWebsocket.Send(Teststring.c_str(), Teststring.size());
 		//mUDPClient.Send(Teststring.c_str(), Teststring.size(), "127.0.0.1", 9999);
 		//if(mMQTTClient.IsConnected())
 		//{
@@ -139,7 +138,7 @@ private:
 	EventLoop::EventLoop::Timer mTimer;
 
 	//Common::StreamSocket mSocket;
-	websocketClient mWebsocket;
+	websocketClient mSocket;
 	//Common::StreamSocketServer mServer;
 	//Common::TLSSocket mSocket;
 	//Common::UDPSocket mUDPClient;

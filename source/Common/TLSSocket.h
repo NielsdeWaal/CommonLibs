@@ -85,7 +85,7 @@ public:
 
 	void Send(const char* data, const size_t len) noexcept
 	{
-		if(mConnected)
+		if(mConnected && mSSLConnected)
 		{
 			//::send(mFd, data, len, MSG_DONTWAIT);
 			const int ret = SSL_write(mSSL, data, len);
@@ -141,7 +141,7 @@ private:
 			{
 				if (err == 0)
 				{
-					mEventLoop.ModifyFiledescriptor(fd, EPOLLIN | EPOLLRDHUP, this);
+					//mEventLoop.ModifyFiledescriptor(fd, EPOLLIN | EPOLLRDHUP, this);
 					mConnected = true;
 					mLogger->info("Connection establisched on fd:{}, starting SSL handshake", fd);
 					const int ret = SSL_connect(mSSL);

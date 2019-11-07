@@ -62,12 +62,15 @@ public:
 	{
 		mSocket.Connect(addr, port);
 		mPort = port;
-		mAddress = std::string{addr};
+		//mAddress = std::string{addr};
+		//TODO We need to find a way to bring over the webaddress from userspace into the lib
+		//Right now we simply expect the IP, but for websockets to function properly we need DNS resolvement
+		mAddress = std::string{"echo.websocket.org"};
 	}
 
 	void OnConnected()
 	{
-		mLogger->debug("Connected to TCP endpoint");
+		mLogger->info("Connected to TCP endpoint");
 		StartWebsocketConnection();
 	}
 
