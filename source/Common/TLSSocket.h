@@ -1,6 +1,10 @@
 #ifndef TLS_SOCKET_H
 #define TLS_SOCKET_H
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
@@ -81,6 +85,33 @@ public:
 			mEventLoop.RegisterFiledescriptor(mFd, EPOLLIN, this);
 			mLogger->info("fd:{} connected instantly", mFd);
 		}
+	}
+
+	void ConnectHostname(const std::string& url, const uint16_t port) noexcept
+	{
+		struct addrinfo hints;
+		struct addrinfo *infoptr;
+		memset(&hints, 0, sizeof hints);
+		hints.ai_family = AF_INET; // AF_INET means IPv4 only addresses
+		hints.ai_socktype = SOCK_STREAM; // Only want stream-based connection
+		hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
+
+		const int result = ::getaddrinfo(url.c_str(), NULL, &hints, &infoptr);
+		if(result)
+		{
+			//fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(result));
+			mLogger->critical("getaddrinfo: {}", gai_strerror(result));
+			throw std::runtime_error("getaddrinfo");
+		}
+
+		//struct addrinfo *p;
+		char host[256];
+		getnameinfo(infoptr->ai_addr, infoptr->ai_addrlen, host, sizeof (host), NULL, 0, NI_NUMERICHOST);
+		mLogger->info("Resolved {} to {}", url, std::string{host});
+
+		Connect(host, port);
+
+		freeaddrinfo(infoptr);
 	}
 
 	void Send(const char* data, const size_t len) noexcept
@@ -208,7 +239,6 @@ private:
 		}
 		else
 		{
-			std::array<char, 512> readBuf = {0};
 			const auto len = SSL_read(mSSL, readBuf.data(), sizeof(readBuf));
 
 			const int err = SSL_get_error(mSSL, len);
@@ -240,6 +270,8 @@ private:
 	bool mConnected = false;
 	bool mSSLConnected = false;
 	bool mSSLShutdownRunning = false;
+
+	std::array<char, 5000> readBuf = {0};
 
 	//SSL/TLS relevant members
 	const SSL_METHOD *mSSLMethod;

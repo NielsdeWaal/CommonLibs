@@ -152,7 +152,6 @@ private:
 
 	void OnFiledescriptorRead(int fd) final
 	{
-		std::array<char, 512> readBuf = {0};
 		const auto len = ::recv(fd, readBuf.data(), sizeof(readBuf), MSG_DONTWAIT);
 
 		if(len == 0)
@@ -179,6 +178,8 @@ private:
 
 	bool mConnected = false;
 	bool mSendInProgress = false;
+
+	std::array<char, 5000> readBuf = {0};
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
