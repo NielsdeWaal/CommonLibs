@@ -52,7 +52,6 @@ private:
 		Opcode mOpcode;
 		int mInitialLength;
 		uint64_t mExtendedLength;
-		uint16_t mExtendedLength16;
 		uint8_t mMask[4];
 	};
 
@@ -159,25 +158,23 @@ private:
 			+ (header.mInitialLength == 126 ? 2 : 0) // Standard length
 			+ (header.mInitialLength == 127 ? 8 : 0) // Extended length
 			+ (header.mIsMasked? 4 : 0); // Masking key
+		header.mExtendedLength = 0;
 
 		size_t headerOffset = 0;
 
 		if(header.mInitialLength < 126)
 		{
-			header.mExtendedLength = 0;
 			header.mExtendedLength = header.mInitialLength;
 			headerOffset = 2;
 		}
 		else if(header.mInitialLength == 126)
 		{
-			header.mExtendedLength16 = 0;
-			header.mExtendedLength16 |= ((uint16_t) dataPtr[2]) << 8;
-			header.mExtendedLength16 |= ((uint16_t) dataPtr[3]) << 0;
+			header.mExtendedLength |= static_cast<uint64_t>(dataPtr[2]) << 8;
+			header.mExtendedLength |= static_cast<uint64_t>(dataPtr[3]) << 0;
 			headerOffset = 4;
 		}
 		else if(header.mInitialLength == 127)
 		{
-			header.mExtendedLength = 0;
 			header.mExtendedLength |= static_cast<uint64_t>(dataPtr[2]) << 56;
 			header.mExtendedLength |= static_cast<uint64_t>(dataPtr[3]) << 48;
 			header.mExtendedLength |= static_cast<uint64_t>(dataPtr[4]) << 40;
@@ -210,25 +207,15 @@ private:
 		{
 			if(header.mFin)
 			{
-				if(header.mIsMasked)
+				for(std::size_t i = 0; i != header.mExtendedLength; ++i)
 				{
-					for(size_t i = 0; i != header.mExtendedLength; ++i)
-					{
-						data[i+headerOffset] ^= header.mMask[i&0x3];
-					}
+					data[i+headerOffset] ^= header.mMask[i&0x3];
 				}
-				if(header.mInitialLength == 126)
+				mHandler->OnIncomingData(this, data+header.mHeaderLength, header.mExtendedLength);
+				if(header.mExtendedLength+header.mHeaderLength < len)
 				{
-					mHandler->OnIncomingData(this, data+header.mHeaderLength, header.mExtendedLength16);
-					if(header.mExtendedLength16+header.mHeaderLength < len)
-					{
-						mLogger->debug("Packet with multiple websocket packets detected");
-						OnIncomingData(conn, data+header.mExtendedLength16+header.mHeaderLength, header.mExtendedLength16+header.mHeaderLength);
-					}
-				}
-				else
-				{
-					mHandler->OnIncomingData(this, data+header.mHeaderLength, len-header.mHeaderLength);
+					mLogger->debug("Packet with multiple websocket packets detected");
+					OnIncomingData(conn, data+header.mExtendedLength+header.mHeaderLength, header.mExtendedLength+header.mHeaderLength);
 				}
 			}
 			else
