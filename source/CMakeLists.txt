@@ -24,7 +24,7 @@ add_custom_target(versionFileTouchForRebuild
 
 #------------------------------------------------------------------------------
 # Libraries dependencies
-find_package (Threads REQUIRED) #threading
+find_package(Threads REQUIRED) #threading
 
 #------------------------------------------------------------------------------
 # By using macro to add common dependencies you can avoid repetition when you have
@@ -47,18 +47,20 @@ add_executable(CommonLibs
 	Common/StreamSocket.h
 	Common/TLSSocket.h
 	Common/UDPSocket.h
+	Common/Websocket.h
 	MQTT/MQTTPacket.h
 	MQTT/MQTTClient.h
 	MQTT/MQTTBroker.h
 	Statwriter/StatWriter.h
 	Statwriter/StatWriter.cpp
 	Example.h
-    main.cpp)
+	main.cpp)
 add_dependencies(CommonLibs versionFileTouchForRebuild) # We want precise time of build in version
 target_include_directories(CommonLibs PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} EventLoop Common)
 target_link_libraries(CommonLibs PRIVATE Threads::Threads)
 target_link_libraries(CommonLibs PRIVATE spdlog)
 target_link_libraries(CommonLibs PRIVATE cpptoml)
+target_link_libraries(CommonLibs PRIVATE json)
 
 install(TARGETS CommonLibs
     BUNDLE DESTINATION "."

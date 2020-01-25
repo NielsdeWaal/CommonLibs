@@ -13,17 +13,20 @@
 #include "StreamSocket.h"
 #include "TLSSocket.h"
 #include "UDPSocket.h"
+#include "Websocket.h"
 
 #include "Statwriter/StatWriter.h"
 
 using namespace std::chrono_literals;
+using websocketClient = Common::WebsocketClient<Common::TLSSocket,Common::ITLSSocketHandler>;
 
 class ExampleApp : public EventLoop::IEventLoopCallbackHandler
-				, public Common::ITLSSocketHandler
-				//, public Common::IStreamSocketHandler
-				//, public Common::IStreamSocketServerHandler
-				//, public Common::IUDPSocketHandler
-				//, public MQTT::IMQTTClientHandler
+					//, public Common::IStreamSocketHandler
+					//, public Common::IStreamSocketServerHandler
+					//, public Common::IUDPSocketHandler
+					//, public MQTT::IMQTTClientHandler
+					, public Common::IWebsocketClientHandler<Common::TLSSocket,Common::ITLSSocketHandler>
+					//, public Common::ITLSSocketHandler
 {
 public:
 	ExampleApp(EventLoop::EventLoop& ev)
@@ -40,9 +43,9 @@ public:
 
 		//mMQTTClient.Initialise("Client1", 60);
 
-		mSW.AddGroup("DEBUG", true);
-		mSW.AddFieldToGroup("DEBUG", "Debug1", [this]() -> float { mDebugMeasurementCounter++; return mDebugMeasurementCounter;});
-		mSW.AddFieldToGroup("DEBUG", "Debug2", [this]() -> int { mDebugMeasurementCounter1++; return mDebugMeasurementCounter1;});
+		//mSW.AddGroup("DEBUG", true);
+		//mSW.AddFieldToGroup("DEBUG", "Debug1", [this]() -> float { mDebugMeasurementCounter++; return mDebugMeasurementCounter;});
+		//mSW.AddFieldToGroup("DEBUG", "Debug2", [this]() -> int { mDebugMeasurementCounter1++; return mDebugMeasurementCounter1;});
 		//mSW.AddGroup("TestGroup", true);
 		//mSW.AddFieldToGroup("TestGroup", "Debug7", [this](){ mDebugMeasurementCounter++; return mDebugMeasurementCounter;});
 	}
@@ -65,8 +68,9 @@ public:
 		mEv.AddTimer(&mTimer);
 		//mServer.BindAndListen(1337);
 		//mSocket.Connect("127.0.0.1", 1337);
-		//mSocket.Connect("174.129.224.73", 443);
-		mSocket.Connect("127.0.0.1", 31337);
+		//mWebsocket.Connect("127.0.0.1", 1337);
+		mSocket.Connect("174.129.224.73", 443);
+		//mSocket.Connect("127.0.0.1", 31337);
 		//mMQTTClient.Connect("127.0.0.1", mMQTTPort);
 		mSW.InfluxConnector("127.0.0.1", mInfluxPort);
 		mSW.SetBatchWriting(5s);
@@ -76,6 +80,7 @@ public:
 	{
 		//mLogger->info("Got callback from timer");
 		mSocket.Send(Teststring.c_str(), Teststring.size());
+		//mWebsocket.Send(Teststring.c_str(), Teststring.size());
 		//mUDPClient.Send(Teststring.c_str(), Teststring.size(), "127.0.0.1", 9999);
 		//if(mMQTTClient.IsConnected())
 		//{
@@ -101,14 +106,16 @@ public:
 	}
 
 	//void OnDisconnect(MQTT::MQTTClient* conn) final
-	void OnDisconnect(Common::TLSSocket* conn) final
+	void OnDisconnect(websocketClient* conn) final
+	//void OnDisconnect(Common::TLSSocket* conn) final
 	//void OnDisconnect(Common::StreamSocket* conn) final
 	{
 		mLogger->warn("Connection terminated");
 	}
 
-	void OnIncomingData(Common::TLSSocket* conn, char* data, size_t len) final
+	//void OnIncomingData(Common::TLSSocket* conn, char* data, size_t len) final
 	//void OnIncomingData(Common::StreamSocket* conn, char* data, size_t len) final
+	void OnIncomingData(websocketClient* conn, char* data, size_t len) final
 	{
 		mLogger->info("Incoming: {}", std::string{data});
 		//conn->Send(data, len);
@@ -131,8 +138,9 @@ private:
 	EventLoop::EventLoop::Timer mTimer;
 
 	//Common::StreamSocket mSocket;
+	websocketClient mSocket;
 	//Common::StreamSocketServer mServer;
-	Common::TLSSocket mSocket;
+	//Common::TLSSocket mSocket;
 	//Common::UDPSocket mUDPClient;
 	//MQTT::MQTTClient mMQTTClient;
 	//int mMQTTPort;
