@@ -25,6 +25,7 @@ add_custom_target(versionFileTouchForRebuild
 #------------------------------------------------------------------------------
 # Libraries dependencies
 find_package(Threads REQUIRED) #threading
+find_library(libUring REQUIRED) #liburing
 
 #------------------------------------------------------------------------------
 # By using macro to add common dependencies you can avoid repetition when you have
@@ -61,6 +62,7 @@ target_link_libraries(CommonLibs PRIVATE Threads::Threads)
 target_link_libraries(CommonLibs PRIVATE spdlog)
 target_link_libraries(CommonLibs PRIVATE cpptoml)
 target_link_libraries(CommonLibs PRIVATE json)
+target_link_libraries(CommonLibs PRIVATE uring)
 
 install(TARGETS CommonLibs
     BUNDLE DESTINATION "."

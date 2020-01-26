@@ -11,6 +11,8 @@
 #include <sys/types.h>
 #include <signal.h>
 
+#include <liburing.h>
+
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/bin_to_hex.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -141,6 +143,7 @@ private:
 	void SetupSignalWatcher();
 
 	static constexpr int MaxEpollEvents = 64;
+	static constexpr int MaxIORingQueueEntries = 1024;
 
 	bool mStarted;
 	bool mStatistics;
@@ -170,6 +173,8 @@ private:
 	struct signalfd_siginfo mFDSI;
 
 	//int mTimerIterationCounter = 0;
+
+	struct io_uring mIoUring;
 
 	std::shared_ptr<cpptoml::table> mConfig;
 	std::shared_ptr<spdlog::logger> mLogger;

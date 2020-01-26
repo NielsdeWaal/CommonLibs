@@ -14,6 +14,8 @@ EventLoop::EventLoop()
 		throw std::runtime_error("Failed to seetup epoll interface");
 	}
 
+	io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, IORING_SETUP_IOPOLL);
+
 	SetupSignalWatcher();
 }
 
@@ -49,6 +51,11 @@ int EventLoop::Run()
 	mLogger->info("Eventloop has started");
 	while (true)
 	{
+		/**
+		 * @brief epoll section
+		 *
+		 * This section handles all FD operations that can be polled by epoll
+		 */
 		mEpollReturn = ::epoll_wait(mEpollFd, mEpollEvents, MaxEpollEvents, mEpollTimeout);
 		mLogger->trace("epoll_wait returned: {}", mEpollReturn);
 		if(mEpollReturn < 0)
@@ -109,6 +116,17 @@ int EventLoop::Run()
 					mLogger->warn("Unhandled event:{} on fd:{}", mEpollEvents[event].data.fd, mEpollEvents[event].events);
 				}
 			}
+		}
+
+		/**
+		 * @brief io_uring section
+		 *
+		 * Section for handling io_uring polling
+		 */
+		const int ioRingReturn = io_uring_enter(mIoUring.ring_fd, 0, 0, IORING_ENTER_GETEVENTS, 0);
+		if(!ioRingReturn)
+		{
+			throw std::runtime_error("Error polling ioring");
 		}
 
 		for(const auto& [callback, latencyClass] : mCallbacks)
