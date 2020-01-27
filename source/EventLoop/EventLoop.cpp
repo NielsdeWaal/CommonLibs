@@ -2,6 +2,8 @@
 
 namespace EventLoop {
 
+#include <linux/io_uring.h>
+
 EventLoop::EventLoop()
 	: mStarted(true)
 	, mEpollFd(::epoll_create1(EPOLL_CLOEXEC))
@@ -14,7 +16,12 @@ EventLoop::EventLoop()
 		throw std::runtime_error("Failed to seetup epoll interface");
 	}
 
-	io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, IORING_SETUP_IOPOLL);
+	// io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, IORING_SETUP_IOPOLL);
+	io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, 0);
+	
+	// io_uring_params uringParams;
+	// uringParams.flags |= IORING_SETUP_IOPOLL;
+	// io_uring_setup(MaxIORingQueueEntries, &uringParams);
 
 	SetupSignalWatcher();
 }
@@ -74,7 +81,7 @@ int EventLoop::Run()
 					!(mEpollEvents[event].events & EPOLLOUT))*/ // error
 				{
 					mLogger->error("epoll event error, fd:{}, event:{}, errno:{}", mEpollEvents[event].data.fd, mEpollEvents[event].events, errno);
-					close(mEpollEvents[event].data.fd);
+					::close(mEpollEvents[event].data.fd);
 				}
 				else if(mEpollEvents[event].events & EPOLLIN)
 				{
@@ -123,12 +130,31 @@ int EventLoop::Run()
 		 *
 		 * Section for handling io_uring polling
 		 */
-		const int ioRingReturn = io_uring_enter(mIoUring.ring_fd, 0, 0, IORING_ENTER_GETEVENTS, 0);
-		if(!ioRingReturn)
+		// int ioRingReturn = io_uring_wait_cqes(mIoUring.ring_fd, 0, 0, IORING_ENTER_GETEVENTS, 0);
+		struct io_uring_sqe *sqe_init = io_uring_get_sqe(&mIoUring);
+		io_uring_prep_poll_add(sqe_init, sock_listen_fd, POLLIN);
+		conn_info conn_i = 
 		{
-			throw std::runtime_error("Error polling ioring");
+			.fd = sock_listen_fd, 
+			.type = POLL_LISTEN
+		};
+		io_uring_sqe_set_data(sqe_init, &conn_i);
+
+		// tell kernel we have put a sqe on the submission ring
+		io_uring_submit(&mIoUring);
+
+		struct io_uring_cqe cqe{};
+		int peekRet = io_uring_peek_cqe(&mIoUring, &cqe);
+		if(!peekRet)
+		{
+			mLogger->info("Got event");
 		}
 
+		/**
+		 * TODO There seems to be some room for improvement here.
+		 * I think we could optimise this slightly by just storing structs in a vector.
+		 * This should provide better iteration speed, especially when we reserve a good chunk of memory
+		 */
 		for(const auto& [callback, latencyClass] : mCallbacks)
 		{
 			/**
