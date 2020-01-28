@@ -131,23 +131,42 @@ int EventLoop::Run()
 		 * Section for handling io_uring polling
 		 */
 		// int ioRingReturn = io_uring_wait_cqes(mIoUring.ring_fd, 0, 0, IORING_ENTER_GETEVENTS, 0);
-		struct io_uring_sqe *sqe_init = io_uring_get_sqe(&mIoUring);
-		io_uring_prep_poll_add(sqe_init, sock_listen_fd, POLLIN);
-		conn_info conn_i = 
-		{
-			.fd = sock_listen_fd, 
-			.type = POLL_LISTEN
-		};
-		io_uring_sqe_set_data(sqe_init, &conn_i);
+		// struct io_uring_sqe *sqe_init = io_uring_get_sqe(&mIoUring);
+		// io_uring_prep_poll_add(sqe_init, mEpollFd, POLLIN);
+		// conn_info conn_i =
+		// {
+			// .fd = sock_listen_fd,
+			// .type = POLL_LISTEN
+		// };
+		// io_uring_sqe_set_data(sqe_init, &conn_i);
 
 		// tell kernel we have put a sqe on the submission ring
 		io_uring_submit(&mIoUring);
 
-		struct io_uring_cqe cqe{};
-		int peekRet = io_uring_peek_cqe(&mIoUring, &cqe);
-		if(!peekRet)
+		io_uring_cqe* cqe;
+		const int peekRet = io_uring_peek_cqe(&mIoUring, &cqe);
+		// if(peekRet != 0)
+		// {
+			// mLogger->info("Got event, retVal: {} errno: {}", peekRet, errno);
+		// }
+		if(!cqe)
 		{
-			mLogger->info("Got event");
+			mLogger->trace("No completion event");
+		}
+		else
+		{
+			io_uring_cqe_seen(&mIoUring, cqe);
+
+			if(cqe->res < 0)
+			{
+				mLogger->warn("Negative res on cqe: {}", cqe->res);
+			}
+			else
+			{
+				// mLogger->info("cqe result: {}", cqe->res);
+				ConnInfo* data = static_cast<ConnInfo*>(io_uring_cqe_get_data(cqe));
+				mLogger->info("conninfo type: {}", data->mType);
+			}
 		}
 
 		/**
@@ -231,14 +250,20 @@ void EventLoop::RegisterCallbackHandler(IEventLoopCallbackHandler* callback, Lat
 
 void EventLoop::RegisterFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler)
 {
-	struct epoll_event event{};
-	event.data.fd = fd;
-	event.events = events;
-	if (epoll_ctl(mEpollFd, EPOLL_CTL_ADD, fd, &event) == -1)
-	{
-		mLogger->critical("Failed to add fd to epoll interface, errno:{}", errno);
-		throw std::runtime_error("Failed to add fd to epoll interface");
-	}
+	// struct epoll_event event{};
+	// event.data.fd = fd;
+	// event.events = events;
+	// if (epoll_ctl(mEpollFd, EPOLL_CTL_ADD, fd, &event) == -1)
+	// {
+		// mLogger->critical("Failed to add fd to epoll interface, errno:{}", errno);
+		// throw std::runtime_error("Failed to add fd to epoll interface");
+	// }
+	// mFdHandlers.insert({fd, handler});
+	// mLogger->info("Registered Fd: {}", fd);
+
+	io_uring_sqe* sqe_init = io_uring_get_sqe(&mIoUring);
+	io_uring_prep_poll_add(sqe_init, fd, events);
+	io_uring_submit(&mIoUring);
 	mFdHandlers.insert({fd, handler});
 	mLogger->info("Registered Fd: {}", fd);
 }

@@ -138,6 +138,13 @@ public:
 	std::shared_ptr<spdlog::logger> RegisterLogger(const std::string& module) const noexcept;
 	std::shared_ptr<cpptoml::table> GetConfigTable(const std::string& module) const noexcept;
 
+	struct ConnInfo
+	{
+	public:
+		int mFD;
+		int mType;
+	};
+
 private:
 	void PrintStatistics() noexcept;
 
