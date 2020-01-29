@@ -17,9 +17,14 @@ EventLoop::EventLoop()
 	}
 
 	// io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, IORING_SETUP_IOPOLL);
-	io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, 0);
-	
-	// io_uring_params uringParams;
+	int ret = io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, 0);
+	if(ret < 0)
+	{
+		mLogger->critical("Failed to setup io_uring, ret: {}", ret);
+		throw std::runtime_error("Failed to setup io_uring");
+	}
+
+	// io_uring_params uringParams{};
 	// uringParams.flags |= IORING_SETUP_IOPOLL;
 	// io_uring_setup(MaxIORingQueueEntries, &uringParams);
 
@@ -130,25 +135,8 @@ int EventLoop::Run()
 		 *
 		 * Section for handling io_uring polling
 		 */
-		// int ioRingReturn = io_uring_wait_cqes(mIoUring.ring_fd, 0, 0, IORING_ENTER_GETEVENTS, 0);
-		// struct io_uring_sqe *sqe_init = io_uring_get_sqe(&mIoUring);
-		// io_uring_prep_poll_add(sqe_init, mEpollFd, POLLIN);
-		// conn_info conn_i =
-		// {
-			// .fd = sock_listen_fd,
-			// .type = POLL_LISTEN
-		// };
-		// io_uring_sqe_set_data(sqe_init, &conn_i);
-
-		// tell kernel we have put a sqe on the submission ring
-		io_uring_submit(&mIoUring);
-
 		io_uring_cqe* cqe;
 		const int peekRet = io_uring_peek_cqe(&mIoUring, &cqe);
-		// if(peekRet != 0)
-		// {
-			// mLogger->info("Got event, retVal: {} errno: {}", peekRet, errno);
-		// }
 		if(!cqe)
 		{
 			mLogger->trace("No completion event");
@@ -261,8 +249,9 @@ void EventLoop::RegisterFiledescriptor(int fd, uint32_t events, IFiledescriptorC
 	// mFdHandlers.insert({fd, handler});
 	// mLogger->info("Registered Fd: {}", fd);
 
-	io_uring_sqe* sqe_init = io_uring_get_sqe(&mIoUring);
-	io_uring_prep_poll_add(sqe_init, fd, events);
+	io_uring_sqe* sqe = io_uring_get_sqe(&mIoUring);
+	io_uring_prep_poll_add(sqe, fd, events);
+
 	io_uring_submit(&mIoUring);
 	mFdHandlers.insert({fd, handler});
 	mLogger->info("Registered Fd: {}", fd);

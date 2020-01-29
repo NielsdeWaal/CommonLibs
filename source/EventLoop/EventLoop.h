@@ -151,7 +151,7 @@ private:
 	void SetupSignalWatcher();
 
 	static constexpr int MaxEpollEvents = 64;
-	static constexpr int MaxIORingQueueEntries = 1024;
+	static constexpr int MaxIORingQueueEntries = 16;
 
 	bool mStarted;
 	bool mStatistics;
@@ -182,7 +182,7 @@ private:
 
 	//int mTimerIterationCounter = 0;
 
-	struct io_uring mIoUring;
+	io_uring mIoUring;
 
 	std::shared_ptr<cpptoml::table> mConfig;
 	std::shared_ptr<spdlog::logger> mLogger;
