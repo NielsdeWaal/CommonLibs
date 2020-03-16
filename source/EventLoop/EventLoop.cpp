@@ -1,5 +1,7 @@
 #include "EventLoop.h"
 
+#include "Util.h"
+
 namespace EventLoop {
 
 EventLoop::EventLoop()
@@ -45,10 +47,12 @@ void EventLoop::Configure()
 
 int EventLoop::Run()
 {
+	PROFILING_ZONE_NAMED("Run function");
 	mStatsTime = std::chrono::high_resolution_clock::now();
 	mLogger->info("Eventloop has started");
 	while (true)
 	{
+		PROFILING_ZONE_NAMED("Main run loop");
 		mEpollReturn = ::epoll_wait(mEpollFd, mEpollEvents, MaxEpollEvents, mEpollTimeout);
 		mLogger->trace("epoll_wait returned: {}", mEpollReturn);
 		if(mEpollReturn < 0)
@@ -58,6 +62,7 @@ int EventLoop::Run()
 		}
 		else
 		{
+			PROFILING_ZONE_NAMED("Handling events on epoll");
 			mLogger->trace("{} events on fd's", mEpollReturn);
 			for(int event = 0; event < mEpollReturn; ++event)
 			{
@@ -113,6 +118,7 @@ int EventLoop::Run()
 
 		for(const auto& [callback, latencyClass] : mCallbacks)
 		{
+			PROFILING_ZONE_NAMED("Callbacks");
 			/**
 			 * Two different methods are available for scheduling timers with a high latency.
 			 *
@@ -155,6 +161,7 @@ int EventLoop::Run()
 
 		for(const auto& timer : mTimers)
 		{
+			PROFILING_ZONE_NAMED("Timers");
 			if(timer->CheckTimerExpired())
 			{
 				timer->mCallback();
@@ -171,6 +178,7 @@ int EventLoop::Run()
 		}
 
 		mCycleCount++;
+		PROFILING_FRAME();
 	}
 
 }

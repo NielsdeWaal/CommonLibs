@@ -9,13 +9,13 @@
 
 #include "EventLoop.h"
 
-#include "MQTT/MQTTClient.h"
+// #include "MQTT/MQTTClient.h"
 #include "StreamSocket.h"
 #include "TLSSocket.h"
-#include "UDPSocket.h"
+// #include "UDPSocket.h"
 #include "Websocket.h"
 
-#include "Statwriter/StatWriter.h"
+#include "StatWriter.h"
 
 using namespace std::chrono_literals;
 using websocketClient = Common::WebsocketClient<Common::TLSSocket,Common::ITLSSocketHandler>;
@@ -79,7 +79,7 @@ public:
 	void OnTimerCallback()
 	{
 		//mLogger->info("Got callback from timer");
-		mSocket.Send(Teststring.c_str(), Teststring.size());
+		// mSocket.Send(Teststring.c_str(), Teststring.size());
 		//mWebsocket.Send(Teststring.c_str(), Teststring.size());
 		//mUDPClient.Send(Teststring.c_str(), Teststring.size(), "127.0.0.1", 9999);
 		//if(mMQTTClient.IsConnected())
@@ -101,6 +101,7 @@ public:
 	void OnConnected() final
 	{
 		mLogger->info("Connection succeeded");
+		mSocket.Send(Teststring.c_str(), Teststring.size());
 		//mMQTTClient.Subscribe("test/TestTopic");
 		//mMQTTClient.Subscribe("SCD30");
 	}
@@ -115,9 +116,9 @@ public:
 
 	//void OnIncomingData(Common::TLSSocket* conn, char* data, size_t len) final
 	//void OnIncomingData(Common::StreamSocket* conn, char* data, size_t len) final
-	void OnIncomingData(websocketClient* conn, char* data, size_t len) final
+	void OnIncomingData(websocketClient* conn, const char* data, const size_t len) final
 	{
-		mLogger->info("Incoming: {}", std::string{data});
+		mLogger->info("Incoming: {}", std::string{data, len});
 		//conn->Send(data, len);
 		//mEv.SheduleForNextCycle([this](){OnNextCycle();});
 	}
