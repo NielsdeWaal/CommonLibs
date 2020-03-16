@@ -13,7 +13,4 @@ add_executable(TestingCommonLibs
 target_link_libraries(TestingCommonLibs
 	EventLoop
 	Common
-	StatWriter
-
-	OpenSSL::SSL
-	OpenSSL::Crypto)
+	StatWriter)
