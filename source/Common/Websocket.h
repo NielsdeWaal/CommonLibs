@@ -2,6 +2,8 @@
 #define WEBSOCKET_H
 
 #include "EventLoop.h"
+#include "StreamSocket.h"
+#include "TLSSocket.h"
 
 namespace Common {
 
@@ -18,8 +20,12 @@ private:
 public:
 	virtual void OnConnected() = 0;
 	virtual void OnDisconnect(WebsocketClient<SocketType, Handler>* conn) = 0;
-	virtual void OnIncomingData(WebsocketClient<SocketType, Handler>* conn, const char* data, const size_t len) = 0;
-	virtual ~IWebsocketClientHandler() {}
+	virtual void OnIncomingData(WebsocketClient<SocketType, Handler>* conn, char* data, size_t len) = 0;
+	virtual ~IWebsocketClientHandler() = default;
+	IWebsocketClientHandler(const IWebsocketClientHandler&) = delete;
+	IWebsocketClientHandler& operator=(const IWebsocketClientHandler&) = delete;
+	IWebsocketClientHandler(IWebsocketClientHandler&&) = delete;
+	IWebsocketClientHandler& operator=(IWebsocketClientHandler&&) = delete;
 };
 
 /**
@@ -52,13 +58,16 @@ private:
 		Opcode mOpcode;
 		int mInitialLength;
 		uint64_t mExtendedLength;
-		uint8_t mMask[4];
+		std::array<uint8_t,4> mMask;
 	};
 
 public:
-	WebsocketClient(EventLoop::EventLoop& ev, IWebsocketClientHandler<SocketType, Handler>* handler) noexcept : mEventLoop(ev)
+	WebsocketClient(EventLoop::EventLoop& ev, IWebsocketClientHandler<SocketType, Handler>* handler) noexcept
+		: mEventLoop(ev)
 		, mHandler(handler)
 		, mSocket(ev, this)
+		, mPort(0)
+		, mConnected(false)
 	{
 		mLogger = mEventLoop.RegisterLogger("WebsocketClient");
 	}
@@ -137,6 +146,36 @@ private:
 
 	void OnIncomingData(SocketType* conn, char* data, size_t len)
 	{
+		if(mFragmented)
+		{
+			mLogger->warn("Received fragment");
+			if(len > mRemainingSize)
+			{
+				mLogger->warn("Packet contains both fragment and next packet");
+				for(std::size_t i = 0; i < mRemainingSize; ++i)
+				{
+					mFragmentation.push_back(data[i]);
+				}
+				data += mRemainingSize;
+				mRemainingSize = 0;
+			}
+			else
+			{
+				mRemainingSize -= len;
+				mLogger->warn("    Inc fragment: {}", std::string{data, len});
+				mLogger->warn("    Remaining bytes: {}", mRemainingSize);
+				for(std::size_t i = 0; i < len; ++i)
+				{
+					mFragmentation.push_back(data[i]);
+				}
+				if(mRemainingSize == 0)
+				{
+					mFragmented = false;
+					mHandler->OnIncomingData(this, mFragmentation.data(), mFragmentation.size());
+				}
+				return;
+			}
+		}
 		//TODO Needs actual HTTP request handling instead of just looking at the first character
 		if(data[0] == 'H' && !mConnected)
 		{
@@ -150,8 +189,8 @@ private:
 		const uint8_t* dataPtr = (uint8_t*)data;
 
 		WebsocketHeader header;
-		header.mFin = (dataPtr[0] & 0x80) == 0x80;
-		header.mOpcode = static_cast<Opcode>((dataPtr[0] & 0x0F));
+		header.mFin = dataPtr[0] & 128;
+		header.mOpcode = static_cast<Opcode>(dataPtr[0] & 15);
 		header.mIsMasked = (dataPtr[1] & 0x80) == 0x80;
 		header.mInitialLength = (dataPtr[1] & 0x7F);
 		header.mHeaderLength = 2 // Opcode and reserved bits
@@ -201,25 +240,73 @@ private:
 			header.mMask[3] = 0;
 		}
 
+		// CONTINUATION woes
+		// Continuation frames are part of fragmentend frames.
+		// These flow as follows:
+		//  - First frame has either TEXT or BINARY, FIN bit is clear (0)
+		//  - Subsequent frames has CONTINUATION opcode, FIN bit is clear (0)
+		//  - Final frame has CONTINUATION opcode, FIN bit is set (1)
 		if(header.mOpcode == Opcode::TEXT
 		|| header.mOpcode == Opcode::BINARY
 		|| header.mOpcode == Opcode::CONTINUATION)
 		{
 			if(header.mFin)
 			{
-				for(std::size_t i = 0; i != header.mExtendedLength; ++i)
+				if(len != header.mHeaderLength+header.mExtendedLength)
 				{
-					data[i+headerOffset] ^= header.mMask[i&0x3];
+					mLogger->warn("Fragmentend message found, len: {}, required size: {}+{}", len, header.mHeaderLength, header.mExtendedLength);
+					if(header.mHeaderLength + header.mExtendedLength < len)
+					{
+						mLogger->warn("    Fragment is smaller then len");
+						mHandler->OnIncomingData(this, data+header.mHeaderLength, header.mExtendedLength);
+						// FIXME Len 8 too high when handling nested packets
+						// OnIncomingData(conn, data+header.mExtendedLength+header.mHeaderLength, header.mExtendedLength+header.mHeaderLength);
+						OnIncomingData(conn, data+header.mHeaderLength+header.mExtendedLength, len-header.mExtendedLength-header.mHeaderLength);
+						return;
+					}
+					else
+					{
+						mRemainingSize = (header.mHeaderLength+header.mExtendedLength) - len;
+						mLogger->warn("    Remaining bytes: {}", mRemainingSize);
+						mFragmented = true;
+						for(std::size_t i = header.mHeaderLength; i < len; ++i)
+						{
+							mFragmentation.push_back(data[i]);
+						}
+						return;
+					}
 				}
-				mHandler->OnIncomingData(this, data+header.mHeaderLength, header.mExtendedLength);
-				if(header.mExtendedLength+header.mHeaderLength < len)
+				if(mContinuationFragments)
 				{
-					mLogger->debug("Packet with multiple websocket packets detected");
-					OnIncomingData(conn, data+header.mExtendedLength+header.mHeaderLength, header.mExtendedLength+header.mHeaderLength);
+					mContinuationFragments = false;
+					for(std::size_t i = 0; i < mContinuation.size(); ++i)
+					{
+						mContinuation[i+headerOffset] ^= header.mMask[i&0x3];
+					}
+					mHandler->OnIncomingData(this, mContinuation.data(), mContinuation.size());
+					mContinuation.clear();
+				}
+				else
+				{
+					for(std::size_t i = 0; i != header.mExtendedLength; ++i)
+					{
+						data[i+headerOffset] ^= header.mMask[i&0x3];
+					}
+					mHandler->OnIncomingData(this, data+header.mHeaderLength, header.mExtendedLength);
+					if(header.mExtendedLength+header.mHeaderLength < len)
+					{
+						mLogger->debug("Packet with multiple websocket packets detected");
+						OnIncomingData(conn, data+header.mExtendedLength+header.mHeaderLength, header.mExtendedLength+header.mHeaderLength);
+					}
 				}
 			}
 			else
 			{
+				mContinuationFragments = true;
+				for(std::size_t i = 0; i != header.mExtendedLength-header.mHeaderLength; ++i)
+				{
+					mContinuation.push_back(data[i+header.mHeaderLength]);
+				}
 				mLogger->warn("Incoming packet not fin");
 			}
 		}
@@ -260,9 +347,16 @@ private:
 
 	bool mConnected;
 
+	bool mContinuationFragments = false;
+	std::vector<char> mContinuation;
+
+	bool mFragmented = false;
+	std::size_t mRemainingSize = 0;
+	std::vector<char> mFragmentation;
+
 	std::shared_ptr<spdlog::logger> mLogger;
 };
 
-}
+} // namespace Common
 
 #endif // WEBSOCKET_H

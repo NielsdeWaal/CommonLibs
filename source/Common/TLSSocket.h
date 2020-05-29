@@ -33,6 +33,7 @@ public:
 	TLSSocket(EventLoop::EventLoop& ev, ITLSSocketHandler* handler)
 		: mEventLoop(ev)
 		, mHandler(handler)
+		, readBuf(std::make_unique<std::array<char, 65535>>())
 	{
 		mLogger = mEventLoop.RegisterLogger("TLSSocket");
 
@@ -49,6 +50,8 @@ public:
 			ERR_print_errors_fp(stderr);
 			throw std::runtime_error("");
 		}
+
+		SSL_CTX_set_default_read_buffer_len(mCTX, 65535);
 
 		mSSL = SSL_new(mCTX);
 
@@ -239,7 +242,13 @@ private:
 		}
 		else
 		{
-			const auto len = SSL_read(mSSL, readBuf.data(), sizeof(readBuf));
+			std::size_t len = SSL_read(mSSL, readBuf->data(), sizeof(readBuf));
+			// const std::size_t remaining = SSL_pending(mSSL);
+			// mLogger->warn("{} bytes remaining to be read", remaining);
+			while(SSL_pending(mSSL) > 0)
+			{
+				len += SSL_read(mSSL, readBuf->data() + len, sizeof(readBuf));
+			}
 
 			const int err = SSL_get_error(mSSL, len);
 			if(err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE ||
@@ -258,7 +267,7 @@ private:
 				return;
 			}
 
-			mHandler->OnIncomingData(this, readBuf.data(), len);
+			mHandler->OnIncomingData(this, readBuf->data(), len);
 		}
 	}
 
@@ -271,7 +280,10 @@ private:
 	bool mSSLConnected = false;
 	bool mSSLShutdownRunning = false;
 
-	std::array<char, 5000> readBuf = {0};
+	// TODO Maybe allocate this on the heap in order to see
+	// if we can read more then 4k bytes.
+	// std::array<char, 65535> readBuf = {0};
+	std::unique_ptr<std::array<char, 65535>> readBuf;
 
 	//SSL/TLS relevant members
 	const SSL_METHOD *mSSLMethod;
