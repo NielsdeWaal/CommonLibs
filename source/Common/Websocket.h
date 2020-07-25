@@ -22,10 +22,10 @@ public:
 	virtual void OnDisconnect(WebsocketClient<SocketType, Handler>* conn) = 0;
 	virtual void OnIncomingData(WebsocketClient<SocketType, Handler>* conn, char* data, size_t len) = 0;
 	virtual ~IWebsocketClientHandler() = default;
-	IWebsocketClientHandler(const IWebsocketClientHandler&) = delete;
-	IWebsocketClientHandler& operator=(const IWebsocketClientHandler&) = delete;
-	IWebsocketClientHandler(IWebsocketClientHandler&&) = delete;
-	IWebsocketClientHandler& operator=(IWebsocketClientHandler&&) = delete;
+	// IWebsocketClientHandler(const IWebsocketClientHandler&) = delete;
+	// IWebsocketClientHandler& operator=(const IWebsocketClientHandler&) = delete;
+	// IWebsocketClientHandler(IWebsocketClientHandler&&) = delete;
+	// IWebsocketClientHandler& operator=(IWebsocketClientHandler&&) = delete;
 };
 
 /**
@@ -70,6 +70,14 @@ public:
 		, mConnected(false)
 	{
 		mLogger = mEventLoop.RegisterLogger("WebsocketClient");
+	}
+
+	~WebsocketClient()
+	{
+		if(mConnected)
+		{
+			SendControlMessage(Opcode::CLOSE, "", 0);
+		}
 	}
 
 	/**
@@ -314,6 +322,16 @@ private:
 		{
 			mLogger->warn("Incoming close");
 			mHandler->OnDisconnect(this);
+			mConnected = false;
+		}
+		else if(header.mOpcode == Opcode::PING)
+		{
+			mLogger->debug("Incoming ping request");
+			if(mConnected)
+			{
+				SendControlMessage(Opcode::PONG, data+header.mHeaderLength, header.mExtendedLength);
+			}
+			/* Respond with pong */
 		}
 		else
 		{
@@ -334,6 +352,44 @@ private:
 		std::string connectString = ss.str();
 
 		mSocket.Send(connectString.c_str(), connectString.size());
+	}
+
+	// TODO should be merged with the normal send function as this is just a duplicate
+	void SendControlMessage(Opcode packetOpcode, const char* data, const size_t len)
+	{
+		assert(
+		packetOpcode == Opcode::PING ||
+		packetOpcode == Opcode::PONG ||
+		packetOpcode == Opcode::CLOSE);
+
+		if(!mConnected)
+		{
+			mLogger->warn("Attempted to send while not connected");
+			return;
+		}
+		const std::vector<char> maskingKey{0x12, 0x34, 0x56, 0x78}; // Do we even care?
+		std::vector<char> header;
+		header.assign(2 + (len >= 126 ? 2 : 0) + (len >= 65536 ? 6 : 0) , 0);
+
+		std::string payload;
+		const char* startPointer = data;
+		const char* endPointer = startPointer + len;
+
+		header[0] = 0x80 | static_cast<int>(packetOpcode);
+
+		header[1] = (len & 0xff) | (0x80);
+		header.insert(std::begin(header)+2, std::begin(maskingKey), std::end(maskingKey));
+
+		//FIXME
+		//Ugly as sin but it should work
+		int i = 0;
+		while(startPointer != endPointer)
+		{
+			payload.push_back((*startPointer++) ^ maskingKey[i++ % 4]);
+		}
+		header.insert(std::begin(header)+2+maskingKey.size(), std::begin(payload), std::end(payload));
+
+		mSocket.Send(header.data(), header.size());
 	}
 
 	EventLoop::EventLoop& mEventLoop;

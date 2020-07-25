@@ -112,6 +112,7 @@ public:
 
 	//TODO Add RemoveTimer function
 	void AddTimer(Timer* timer);
+	void RemoveTimer(Timer* timer);
 
 	enum class LatencyType : std::uint8_t {
 		Low = 0,

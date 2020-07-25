@@ -159,6 +159,7 @@ int EventLoop::Run()
 			*/
 		}
 
+		// TODO cache current time value, no need to retrieve it at every cycle
 		for(const auto& timer : mTimers)
 		{
 			PROFILING_ZONE_NAMED("Timers");
@@ -186,6 +187,15 @@ int EventLoop::Run()
 void EventLoop::AddTimer(Timer* timer)
 {
 	mTimers.push_back(timer);
+}
+
+void EventLoop::RemoveTimer(Timer* timer)
+{
+	auto it = std::find_if(mTimers.begin(), mTimers.end(), [&](Timer* t){return timer == t;});
+	if(it != mTimers.end())
+	{
+		mTimers.erase(it);
+	}
 }
 
 void EventLoop::RegisterCallbackHandler(IEventLoopCallbackHandler* callback, LatencyType latency)
