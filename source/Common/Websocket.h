@@ -33,6 +33,7 @@ public:
  *
  * TODO We need a more clean way for specifing the port, maybe default to either 80 of 443 depending on the SocketType, and if specified use another port.
  * TODO Better connect string solution. Now we just construct one roughly without any thought.
+ * TODO Ping timeout, maybe with config option. Just a normal eventloop timer should suffice.
  */
 
 template<typename SocketType, typename Handler>
@@ -95,6 +96,9 @@ public:
 		mUrl = additionalURL;
 	}
 
+	/**
+	 * @brief Send connection request using hostname.
+	 */
 	void ConnectHostname(const std::string& hostname, const std::uint16_t port, const std::string& additionalURL)
 	{
 		mSocket.ConnectHostname(hostname, port);
@@ -103,6 +107,12 @@ public:
 		mUrl = additionalURL;
 	}
 
+	/**
+	 * @brief Send data to connected host
+	 *
+	 * `len` must be equal to the data that is supposed to be send.
+	 * Currently we are masking every packet with the same key.
+	 */
 	void Send(const char* data, const size_t len)
 	{
 		if(!mConnected)
@@ -133,6 +143,23 @@ public:
 		header.insert(std::begin(header)+2+maskingKey.size(), std::begin(payload), std::end(payload));
 
 		mSocket.Send(header.data(), header.size());
+	}
+
+	/**
+	 * @brief Send ping request
+	 *
+	 * Additional data can be supplied and will be verified upon receiving a pong message.
+	 * !!! Currently there is no timeout mechanism in place, it should still be usefull as a heartbeat mechanism
+	 */
+	void SendPing(const char* data, const size_t len)
+	{
+		if(mConnected)
+		{
+			SendControlMessage(Opcode::PING, data, len);
+			mPingData = std::make_unique<char[]>(len);
+			std::copy(data, data+len, mPingData.get());
+			mAwaitingPong = true;
+		}
 	}
 
 private:
@@ -267,8 +294,6 @@ private:
 					{
 						mLogger->warn("    Fragment is smaller then len");
 						mHandler->OnIncomingData(this, data+header.mHeaderLength, header.mExtendedLength);
-						// FIXME Len 8 too high when handling nested packets
-						// OnIncomingData(conn, data+header.mExtendedLength+header.mHeaderLength, header.mExtendedLength+header.mHeaderLength);
 						OnIncomingData(conn, data+header.mHeaderLength+header.mExtendedLength, len-header.mExtendedLength-header.mHeaderLength);
 						return;
 					}
@@ -332,6 +357,22 @@ private:
 				SendControlMessage(Opcode::PONG, data+header.mHeaderLength, header.mExtendedLength);
 			}
 			/* Respond with pong */
+		}
+		else if(header.mOpcode == Opcode::PONG)
+		{
+			mLogger->debug("Incoming pong message");
+			if(mPingData)
+			{
+				const int rc = std::memcmp(data+header.mHeaderLength, mPingData.get(), header.mExtendedLength);
+				if(rc != 0)
+				{
+					mLogger->error("Pong reply does not equal");
+					mHandler->OnDisconnect(this);
+					mConnected = false;
+					mPingData.reset(nullptr);
+					mAwaitingPong = false;
+				}
+			}
 		}
 		else
 		{
@@ -409,6 +450,10 @@ private:
 	bool mFragmented = false;
 	std::size_t mRemainingSize = 0;
 	std::vector<char> mFragmentation;
+
+	std::unique_ptr<char[]> mPingData;
+	// TODO currenty this isn't used, but this should be used in a timeout
+	bool mAwaitingPong = false;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
