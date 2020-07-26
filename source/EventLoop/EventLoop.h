@@ -4,6 +4,7 @@
 #include <chrono>
 #include <unordered_map>
 #include <vector>
+#include <variant>
 
 #include <sys/epoll.h>
 #include <sys/signalfd.h>
@@ -21,6 +22,8 @@
 
 namespace EventLoop {
 
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 using namespace std::chrono_literals;
 
 /**
@@ -71,12 +74,15 @@ public:
 		Active = 1
 	};
 
-	//TODO Be able to update timer
+	// TODO Be able to update timer
+	// TODO Remove std::function in favor of template argument
 	struct Timer
 	{
 		using TimePoint = std::chrono::high_resolution_clock::time_point;
 		using Clock = std::chrono::high_resolution_clock;
 		using seconds = std::chrono::seconds;
+		using milliseconds = std::chrono::milliseconds;
+		using minutes = std::chrono::minutes;
 
 		Timer(seconds duration, TimerType type, std::function<void()> callback)
 			: mEnd(static_cast<TimePoint>(Clock::now()) + duration)
@@ -85,6 +91,22 @@ public:
 			, mType(type)
 			, mCallback(callback)
 		{}
+
+		Timer(milliseconds duration, TimerType type, std::function<void()> callback)
+			: mEnd(static_cast<TimePoint>(Clock::now()) + duration)
+			, mState(TimerState::Active)
+			, mDuration(duration)
+			, mType(type)
+			, mCallback(callback)
+			{}
+
+		Timer(minutes duration, TimerType type, std::function<void()> callback)
+			: mEnd(static_cast<TimePoint>(Clock::now()) + duration)
+			, mState(TimerState::Active)
+			, mDuration(duration)
+			, mType(type)
+			, mCallback(callback)
+			{}
 
 		Timer() = default;
 
@@ -95,7 +117,11 @@ public:
 
 		void UpdateDeadline() noexcept
 		{
-			mEnd = static_cast<TimePoint>(Clock::now()) + mDuration;
+			std::visit(overloaded {
+				[](seconds arg) {static_cast<TimePoint>(Clock::now())+ arg;},
+				[](milliseconds arg) {static_cast<TimePoint>(Clock::now())+ arg;},
+				[](minutes arg) {static_cast<TimePoint>(Clock::now())+ arg;},
+			}, mDuration);
 		}
 
 		bool operator==(const Timer& rhs) const noexcept
@@ -105,7 +131,7 @@ public:
 
 		TimePoint mEnd;
 		TimerState mState;
-		seconds mDuration;
+		std::variant<milliseconds, seconds, minutes> mDuration;
 		TimerType mType;
 		std::function<void()> mCallback;
 	};

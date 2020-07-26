@@ -14,7 +14,7 @@ TEST_CASE("EventLoop Timer callback", "[EventLoop Timer]") {
 
 	bool timerConfirmation = false;
 
-	EventLoop::EventLoop::Timer evTimer = EventLoop::EventLoop::Timer(EventLoop::EventLoop::Timer(1s, EventLoop::EventLoop::TimerType::Oneshot,
+	EventLoop::EventLoop::Timer evTimer = EventLoop::EventLoop::Timer(EventLoop::EventLoop::Timer(1ms, EventLoop::EventLoop::TimerType::Oneshot,
 				[&](){
 					timerConfirmation = true;
 					std::raise(SIGINT);
@@ -36,7 +36,7 @@ TEST_CASE("EventLoop Timer timing", "[EventLoop Timer]")
 
 	auto timeStart = std::chrono::high_resolution_clock::now();
 	auto timeEnd = std::chrono::high_resolution_clock::now();
-	EventLoop::EventLoop::Timer evTimer = EventLoop::EventLoop::Timer(EventLoop::EventLoop::Timer(1s, EventLoop::EventLoop::TimerType::Oneshot,
+	EventLoop::EventLoop::Timer evTimer = EventLoop::EventLoop::Timer(EventLoop::EventLoop::Timer(100ms, EventLoop::EventLoop::TimerType::Oneshot,
 				[&](){
 					timeEnd = std::chrono::high_resolution_clock::now();
 					std::raise(SIGINT);
@@ -47,7 +47,39 @@ TEST_CASE("EventLoop Timer timing", "[EventLoop Timer]")
 	timeStart = std::chrono::high_resolution_clock::now();
 	loop.Run();
 
-	REQUIRE(std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count() == Approx(1000).epsilon(0.01));
+	REQUIRE(std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count() == Approx(100).epsilon(0.01));
+}
+
+TEST_CASE("EventLoop Timer removal", "[EventLoop Timer]")
+{
+	EventLoop::EventLoop loop;
+	loop.LoadConfig("Example.toml");
+	loop.Configure();
+
+	int callCounter = 0;
+
+	EventLoop::EventLoop::Timer evTimer = EventLoop::EventLoop::Timer(EventLoop::EventLoop::Timer(1ms, EventLoop::EventLoop::TimerType::Oneshot,
+		[&](){
+			callCounter++;
+			std::raise(SIGINT);
+		}
+	));
+
+	EventLoop::EventLoop::Timer AssertTimer = EventLoop::EventLoop::Timer(EventLoop::EventLoop::Timer(2ms, EventLoop::EventLoop::TimerType::Oneshot,
+	[&](){
+		REQUIRE(callCounter == 1);
+		std::raise(SIGINT);
+	}
+		));
+	loop.AddTimer(&evTimer);
+
+	loop.Run();
+
+	loop.RemoveTimer(&evTimer);
+	loop.AddTimer(&AssertTimer);
+
+	loop.Run();
+	REQUIRE(callCounter == 1);
 }
 
 TEST_CASE("EventLoop Register logger", "[EventLoop Logging]")
