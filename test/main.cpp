@@ -97,3 +97,34 @@ TEST_CASE("EventLoop Register logger", "[EventLoop Logging]")
 	REQUIRE(logger != nullptr);
 	REQUIRE(logger->name() == "TestingLogger");
 }
+
+TEST_CASE("EventLoop callback", "[EventLoop callback]")
+{
+	EventLoop::EventLoop loop;
+	loop.LoadConfig("Example.toml");
+	loop.Configure();
+
+	struct Test : public EventLoop::IEventLoopCallbackHandler
+	{
+	public:
+		Test(EventLoop::EventLoop& ev)
+			: mEv(ev)
+		{
+			mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
+		}
+
+		void OnEventLoopCallback() final
+		{
+			REQUIRE(true);
+			std::raise(SIGINT);
+		}
+
+	private:
+		EventLoop::EventLoop& mEv;
+	};
+
+	Test callbackTest(loop);
+
+	loop.Run();
+
+}

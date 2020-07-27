@@ -95,19 +95,17 @@ public:
 		struct addrinfo hints;
 		struct addrinfo *infoptr;
 		memset(&hints, 0, sizeof hints);
-		hints.ai_family = AF_INET; // AF_INET means IPv4 only addresses
+		hints.ai_family = AF_INET;       // AF_INET means IPv4 only addresses
 		hints.ai_socktype = SOCK_STREAM; // Only want stream-based connection
 		hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
 
 		const int result = ::getaddrinfo(url.c_str(), NULL, &hints, &infoptr);
 		if(result)
 		{
-			//fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(result));
 			mLogger->critical("getaddrinfo: {}", gai_strerror(result));
 			throw std::runtime_error("getaddrinfo");
 		}
 
-		//struct addrinfo *p;
 		char host[256];
 		getnameinfo(infoptr->ai_addr, infoptr->ai_addrlen, host, sizeof (host), NULL, 0, NI_NUMERICHOST);
 		mLogger->info("Resolved {} to {}", url, std::string{host});
@@ -121,7 +119,6 @@ public:
 	{
 		if(mConnected && mSSLConnected)
 		{
-			//::send(mFd, data, len, MSG_DONTWAIT);
 			const int ret = SSL_write(mSSL, data, len);
 			if(ret <= 0)
 			{

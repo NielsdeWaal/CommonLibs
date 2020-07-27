@@ -111,6 +111,54 @@ public:
 		return mConnected;
 	}
 
+	/**
+	 * @brief Get remote address from connected peer
+	 *
+	 * TODO instead of requesting, it should be retrieved from object sockaddr,
+	 * however this wont work for incoming connections.
+	 */
+	std::uint32_t GetPeerAddress() noexcept
+	{
+		if(mConnected)
+		{
+			struct sockaddr_in remoteRequest;
+			socklen_t addrLen = sizeof(remoteRequest);
+			const int rc = getpeername(mFd, (struct sockaddr*)&remoteRequest, &addrLen);
+			if(rc != 0)
+			{
+				mLogger->error("Error retrieving peer address, errno: {} rc: {}", errno, rc);
+				return 0;
+			}
+
+			return remote.sin_addr.s_addr;
+		}
+		return 0;
+	}
+
+	/**
+	 * @brief Get remote port from connected peer
+	 *
+	 * TODO instead of requesting, it should be retrieved from object sockaddr,
+	 * however this wont work for incoming connections.
+	 */
+	std::uint16_t GetPeerPort() noexcept
+	{
+		if(mConnected)
+		{
+			struct sockaddr_in remoteRequest;
+			socklen_t addrLen = sizeof(remoteRequest);
+			const int rc = getpeername(mFd, (struct sockaddr*)&remoteRequest, &addrLen);
+			if(rc != 0)
+			{
+				mLogger->error("Error retrieving peer address, errno: {} rc: {}", errno, rc);
+				return 0;
+			}
+
+			return ntohs(remote.sin_port);
+		}
+		return 0;
+	}
+
 private:
 
 	void OnFiledescriptorWrite(int fd) final
@@ -132,8 +180,8 @@ private:
 				else
 				{
 					mEventLoop.UnregisterFiledescriptor(mFd);
-					mHandler->OnDisconnect(this);
 					mConnected = false;
+					mHandler->OnDisconnect(this);
 				}
 			}
 		}
@@ -158,8 +206,8 @@ private:
 		{
 			mLogger->info("Socket has been disconnected, closing filedescriptor. fd:{}", fd);
 			mEventLoop.UnregisterFiledescriptor(mFd);
-			mHandler->OnDisconnect(this);
 			mConnected = false;
+			mHandler->OnDisconnect(this);
 			return;
 		}
 
