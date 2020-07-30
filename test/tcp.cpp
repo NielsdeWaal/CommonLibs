@@ -85,7 +85,6 @@ TEST_CASE("TCP Read And Write", "[Eventloop TCP]")
 	Client client(loop, localAddress, localPort);
 
 	loop.Run();
-
 }
 
 TEST_CASE("TCP PeerId", "[Eventloop TCP]")
@@ -170,5 +169,4 @@ TEST_CASE("TCP PeerId", "[Eventloop TCP]")
 	Client client(loop, localAddress, localPort);
 
 	loop.Run();
-
 }

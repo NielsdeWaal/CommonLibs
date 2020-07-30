@@ -2,6 +2,7 @@ add_compile_options(-std=c++17 -Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wunuse
 set(testSources
   main.cpp
   tcp.cpp
+  websocket.cpp
   )
 
 find_package(Catch2 REQUIRED)

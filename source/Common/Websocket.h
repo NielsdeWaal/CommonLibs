@@ -9,6 +9,149 @@ namespace Common {
 
 using namespace EventLoop;
 
+namespace Websocket {
+
+struct WebsocketDecoder
+{
+public:
+	WebsocketDecoder(EventLoop::EventLoop& ev, const std::uint8_t* buffer, const std::size_t bufferSize)
+		: mBuffer(buffer)
+		, mBufferSize(bufferSize)
+		, mIndex(0)
+	{
+		mLogger = ev.RegisterLogger("WebsocketDecoder");
+	}
+
+	WebsocketDecoder(EventLoop::EventLoop& ev, const std::vector<std::uint8_t>& buffer)
+		: mBuffer(buffer.data())
+		, mBufferSize(buffer.size())
+		, mIndex(0)
+		{
+			mLogger = ev.RegisterLogger("WebsocketDecoder");
+		}
+
+	enum class Opcode : std::uint8_t {
+		CONTINUATION = 0x0,
+		TEXT = 0x1,
+		BINARY = 0x2,
+		CLOSE = 0x8,
+		PING = 0x9,
+		PONG = 0xA,
+	};
+
+	enum class MessageState : std::uint8_t {
+		NoMessage,
+		TextMessage,
+		BinaryMessage,
+		Error,
+		Ping,
+		Pong,
+		Close
+	};
+
+	MessageState DecodeMessage(std::vector<std::uint8_t>& dest)
+	{
+		if (mIndex + 1 >= mBufferSize)
+		{
+			return MessageState::NoMessage;
+		}
+		if ((mBuffer[mIndex] & 0x80) == 0)
+		{
+			// FIN bit is not clear...
+			mLogger->warn("Received websocket frame without FIN bit set - unsupported");
+			return MessageState::Error;
+		}
+
+		const auto reservedBits = mBuffer[mIndex] & (7 << 4);
+		if ((reservedBits & 0x30) != 0)
+		{
+			mLogger->warn("Received websocket frame with reserved bits set - error");
+			return MessageState::Error;
+		}
+
+		const auto opcode = static_cast<Opcode>(mBuffer[mIndex] & 0xf);
+		size_t payloadLength = mBuffer[mIndex + 1] & 0x7fu;
+		const auto maskBit = mBuffer[mIndex + 1] & 0x80;
+		auto ptr = mIndex + 2;
+		if (payloadLength == 126)
+		{
+			if (mBufferSize < 4)
+			{
+				return MessageState::NoMessage;
+			}
+			uint16_t raw_length;
+			std::memcpy(&raw_length, &mBuffer[ptr], sizeof(raw_length));
+			payloadLength = htons(raw_length);
+			ptr += 2;
+		}
+		else if (payloadLength == 127)
+		{
+			if (mBufferSize < 10)
+			{
+				return MessageState::NoMessage;
+			}
+			std::uint64_t raw_length;
+			std::memcpy(&raw_length, &mBuffer[ptr], sizeof(raw_length));
+			payloadLength = __bswap_64(raw_length);
+			ptr += 8;
+		}
+		uint32_t mask = 0;
+		if (maskBit)
+		{
+			// MASK is set.
+			if (mBufferSize < ptr + 4) {
+				return MessageState::NoMessage;
+			}
+			std::uint32_t raw_length;
+			std::memcpy(&raw_length, &mBuffer[ptr], sizeof(raw_length));
+			mask = htonl(raw_length);
+			ptr += 4;
+		}
+		auto bytesLeftInBuffer = mBufferSize - ptr;
+		if (payloadLength > bytesLeftInBuffer)
+		{
+			return MessageState::NoMessage;
+		}
+
+		dest.clear();
+		dest.reserve(payloadLength);
+		for (auto i = 0u; i < payloadLength; ++i)
+		{
+			auto byteShift = (3 - (i & 3)) * 8;
+			dest.push_back(static_cast<uint8_t>((mBuffer[ptr++] ^ (mask >> byteShift)) & 0xff));
+		}
+		mIndex = ptr;
+		switch (opcode) {
+		default:
+			mLogger->warn("Received hybi frame with unknown opcode: {}", static_cast<int>(opcode));
+			return MessageState::Error;
+		case Opcode::TEXT:
+			return MessageState::TextMessage;
+		case Opcode::BINARY:
+			return MessageState::BinaryMessage;
+		case Opcode::PING:
+			return MessageState::Ping;
+		case Opcode::PONG:
+			return MessageState::Pong;
+		case Opcode::CLOSE:
+			return MessageState::Close;
+		}
+	}
+
+	std::size_t GetNumBytesDecoded() const
+	{
+		return mIndex;
+	}
+
+private:
+	std::shared_ptr<spdlog::logger> mLogger;
+	const std::uint8_t* mBuffer;
+	std::size_t mIndex;
+	const std::size_t mBufferSize;
+};
+
+} // namespace Websocket
+
 template<typename SocketType, typename Handler>
 class WebsocketClient;
 
@@ -42,14 +185,13 @@ class WebsocketClient : public Handler
 private:
 	static_assert(std::is_same_v<Common::StreamSocket, SocketType> || std::is_same_v<Common::TLSSocket, SocketType>, "SocketType is not compatible with websocket");
 
-	enum class Opcode : std::uint8_t
-	{
-		CONTINUATION = 0,
-		TEXT = 1,
-		BINARY = 2,
-		CLOSE = 8,
-		PING = 9,
-		PONG = 10,
+	enum class Opcode : std::uint8_t {
+		CONTINUATION = 0x0,
+		TEXT = 0x1,
+		BINARY = 0x2,
+		CLOSE = 0x8,
+		PING = 0x9,
+		PONG = 0xA,
 	};
 
 	struct WebsocketHeader {
@@ -61,7 +203,6 @@ private:
 		uint64_t mExtendedLength;
 		std::array<uint8_t,4> mMask;
 	};
-
 public:
 	WebsocketClient(EventLoop::EventLoop& ev, IWebsocketClientHandler<SocketType, Handler>* handler) noexcept
 		: mEventLoop(ev)
@@ -78,6 +219,7 @@ public:
 		if(mConnected)
 		{
 			SendControlMessage(Opcode::CLOSE, "", 0);
+			mSocket.Shutdown();
 		}
 	}
 
@@ -181,36 +323,6 @@ private:
 
 	void OnIncomingData(SocketType* conn, char* data, size_t len)
 	{
-		if(mFragmented)
-		{
-			mLogger->warn("Received fragment");
-			if(len > mRemainingSize)
-			{
-				mLogger->warn("Packet contains both fragment and next packet");
-				for(std::size_t i = 0; i < mRemainingSize; ++i)
-				{
-					mFragmentation.push_back(data[i]);
-				}
-				data += mRemainingSize;
-				mRemainingSize = 0;
-			}
-			else
-			{
-				mRemainingSize -= len;
-				mLogger->warn("    Inc fragment: {}", std::string{data, len});
-				mLogger->warn("    Remaining bytes: {}", mRemainingSize);
-				for(std::size_t i = 0; i < len; ++i)
-				{
-					mFragmentation.push_back(data[i]);
-				}
-				if(mRemainingSize == 0)
-				{
-					mFragmented = false;
-					mHandler->OnIncomingData(this, mFragmentation.data(), mFragmentation.size());
-				}
-				return;
-			}
-		}
 		//TODO Needs actual HTTP request handling instead of just looking at the first character
 		if(data[0] == 'H' && !mConnected)
 		{
@@ -223,160 +335,42 @@ private:
 
 		const uint8_t* dataPtr = (uint8_t*)data;
 
-		WebsocketHeader header;
-		header.mFin = dataPtr[0] & 128;
-		header.mOpcode = static_cast<Opcode>(dataPtr[0] & 15);
-		header.mIsMasked = (dataPtr[1] & 0x80) == 0x80;
-		header.mInitialLength = (dataPtr[1] & 0x7F);
-		header.mHeaderLength = 2 // Opcode and reserved bits
-			+ (header.mInitialLength == 126 ? 2 : 0) // Standard length
-			+ (header.mInitialLength == 127 ? 8 : 0) // Extended length
-			+ (header.mIsMasked? 4 : 0); // Masking key
-		header.mExtendedLength = 0;
-
-		size_t headerOffset = 0;
-
-		if(header.mInitialLength < 126)
+		Websocket::WebsocketDecoder decoder(mEventLoop, dataPtr, len);
+		Websocket::WebsocketDecoder::MessageState state;
+		std::vector<std::uint8_t> dest;
+		dest.reserve(512);
+		while(true)
 		{
-			header.mExtendedLength = header.mInitialLength;
-			headerOffset = 2;
-		}
-		else if(header.mInitialLength == 126)
-		{
-			header.mExtendedLength |= static_cast<uint64_t>(dataPtr[2]) << 8;
-			header.mExtendedLength |= static_cast<uint64_t>(dataPtr[3]) << 0;
-			headerOffset = 4;
-		}
-		else if(header.mInitialLength == 127)
-		{
-			header.mExtendedLength |= static_cast<uint64_t>(dataPtr[2]) << 56;
-			header.mExtendedLength |= static_cast<uint64_t>(dataPtr[3]) << 48;
-			header.mExtendedLength |= static_cast<uint64_t>(dataPtr[4]) << 40;
-			header.mExtendedLength |= static_cast<uint64_t>(dataPtr[5]) << 32;
-			header.mExtendedLength |= static_cast<uint64_t>(dataPtr[6]) << 24;
-			header.mExtendedLength |= static_cast<uint64_t>(dataPtr[7]) << 16;
-			header.mExtendedLength |= static_cast<uint64_t>(dataPtr[8]) << 8;
-			header.mExtendedLength |= static_cast<uint64_t>(dataPtr[9]) << 0;
-			headerOffset = 10;
-		}
-
-		if(header.mIsMasked)
-		{
-			header.mMask[0] = (static_cast<uint8_t>(dataPtr[headerOffset+0])) << 0;
-			header.mMask[1] = (static_cast<uint8_t>(dataPtr[headerOffset+1])) << 0;
-			header.mMask[2] = (static_cast<uint8_t>(dataPtr[headerOffset+2])) << 0;
-			header.mMask[3] = (static_cast<uint8_t>(dataPtr[headerOffset+3])) << 0;
-		}
-		else
-		{
-			header.mMask[0] = 0;
-			header.mMask[1] = 0;
-			header.mMask[2] = 0;
-			header.mMask[3] = 0;
-		}
-
-		// CONTINUATION woes
-		// Continuation frames are part of fragmentend frames.
-		// These flow as follows:
-		//  - First frame has either TEXT or BINARY, FIN bit is clear (0)
-		//  - Subsequent frames has CONTINUATION opcode, FIN bit is clear (0)
-		//  - Final frame has CONTINUATION opcode, FIN bit is set (1)
-		if(header.mOpcode == Opcode::TEXT
-		|| header.mOpcode == Opcode::BINARY
-		|| header.mOpcode == Opcode::CONTINUATION)
-		{
-			if(header.mFin)
+			state = decoder.DecodeMessage(dest);
+			switch(state)
 			{
-				if(len != header.mHeaderLength+header.mExtendedLength)
-				{
-					mLogger->warn("Fragmentend message found, len: {}, required size: {}+{}", len, header.mHeaderLength, header.mExtendedLength);
-					if(header.mHeaderLength + header.mExtendedLength < len)
-					{
-						mLogger->warn("    Fragment is smaller then len");
-						mHandler->OnIncomingData(this, data+header.mHeaderLength, header.mExtendedLength);
-						OnIncomingData(conn, data+header.mHeaderLength+header.mExtendedLength, len-header.mExtendedLength-header.mHeaderLength);
-						return;
-					}
-					else
-					{
-						mRemainingSize = (header.mHeaderLength+header.mExtendedLength) - len;
-						mLogger->warn("    Remaining bytes: {}", mRemainingSize);
-						mFragmented = true;
-						for(std::size_t i = header.mHeaderLength; i < len; ++i)
-						{
-							mFragmentation.push_back(data[i]);
-						}
-						return;
-					}
-				}
-				if(mContinuationFragments)
-				{
-					mContinuationFragments = false;
-					for(std::size_t i = 0; i < mContinuation.size(); ++i)
-					{
-						mContinuation[i+headerOffset] ^= header.mMask[i&0x3];
-					}
-					mHandler->OnIncomingData(this, mContinuation.data(), mContinuation.size());
-					mContinuation.clear();
-				}
-				else
-				{
-					for(std::size_t i = 0; i != header.mExtendedLength; ++i)
-					{
-						data[i+headerOffset] ^= header.mMask[i&0x3];
-					}
-					mHandler->OnIncomingData(this, data+header.mHeaderLength, header.mExtendedLength);
-					if(header.mExtendedLength+header.mHeaderLength < len)
-					{
-						mLogger->debug("Packet with multiple websocket packets detected");
-						OnIncomingData(conn, data+header.mExtendedLength+header.mHeaderLength, header.mExtendedLength+header.mHeaderLength);
-					}
-				}
-			}
-			else
+			case Websocket::WebsocketDecoder::MessageState::TextMessage:
 			{
-				mContinuationFragments = true;
-				for(std::size_t i = 0; i != header.mExtendedLength-header.mHeaderLength; ++i)
-				{
-					mContinuation.push_back(data[i+header.mHeaderLength]);
-				}
-				mLogger->warn("Incoming packet not fin");
+				mHandler->OnIncomingData(this, (char*)dest.data(), dest.size());
+				break;
 			}
-		}
-		else if(header.mOpcode == Opcode::CLOSE)
-		{
-			mLogger->warn("Incoming close");
-			mHandler->OnDisconnect(this);
-			mConnected = false;
-		}
-		else if(header.mOpcode == Opcode::PING)
-		{
-			mLogger->debug("Incoming ping request");
-			if(mConnected)
+			case Websocket::WebsocketDecoder::MessageState::BinaryMessage:
 			{
-				SendControlMessage(Opcode::PONG, data+header.mHeaderLength, header.mExtendedLength);
+				mHandler->OnIncomingData(this, (char*)dest.data(), dest.size());
+				break;
 			}
-			/* Respond with pong */
-		}
-		else if(header.mOpcode == Opcode::PONG)
-		{
-			mLogger->debug("Incoming pong message");
-			if(mPingData)
+			case Websocket::WebsocketDecoder::MessageState::NoMessage:
 			{
-				const int rc = std::memcmp(data+header.mHeaderLength, mPingData.get(), header.mExtendedLength);
-				if(rc != 0)
-				{
-					mLogger->error("Pong reply does not equal");
-					mHandler->OnDisconnect(this);
-					mConnected = false;
-					mPingData.reset(nullptr);
-					mAwaitingPong = false;
-				}
+				mLogger->warn("NoMessage");
+				return;
 			}
-		}
-		else
-		{
-			mLogger->warn("Unhandled opcode: {}", dataPtr[0] & 0x0F);
+			case Websocket::WebsocketDecoder::MessageState::Error:
+			{
+				mLogger->critical("Error state");
+				throw std::runtime_error("error state returned from websocket decoder");
+				return;
+			}
+			default:
+			{
+				mLogger->warn("Unhandled messagestate");
+				return;
+			}
+			}
 		}
 	}
 

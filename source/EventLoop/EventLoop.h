@@ -118,9 +118,9 @@ public:
 		void UpdateDeadline() noexcept
 		{
 			std::visit(overloaded {
-				[](seconds arg) {static_cast<TimePoint>(Clock::now())+ arg;},
-				[](milliseconds arg) {static_cast<TimePoint>(Clock::now())+ arg;},
-				[](minutes arg) {static_cast<TimePoint>(Clock::now())+ arg;},
+				[this](seconds arg) {mEnd = static_cast<TimePoint>(Clock::now())+ arg;},
+				[this](milliseconds arg) {mEnd = static_cast<TimePoint>(Clock::now())+ arg;},
+				[this](minutes arg) {mEnd = static_cast<TimePoint>(Clock::now())+ arg;},
 			}, mDuration);
 		}
 
