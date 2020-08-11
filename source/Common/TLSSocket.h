@@ -65,6 +65,10 @@ public:
 		{
 			Shutdown();
 		}
+
+		SSL_free(mSSL);
+		SSL_CTX_free(mCTX);
+		ERR_free_strings();
 	}
 
 	void Connect(const char* addr, const uint16_t port) noexcept
