@@ -3,18 +3,18 @@
 
 #include <chrono>
 #include <unordered_map>
-#include <vector>
 #include <variant>
+#include <vector>
 
+#include <csignal>
 #include <sys/epoll.h>
 #include <sys/signalfd.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <signal.h>
 
-#include <spdlog/spdlog.h>
-#include <spdlog/fmt/bin_to_hex.h>
+// #include <spdlog/fmt/bin_to_hex.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/spdlog.h>
 
 #include <cpptoml.h>
 
@@ -22,8 +22,13 @@
 
 namespace EventLoop {
 
-template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
-template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+template<class... Ts>
+struct overloaded : Ts...
+{
+	using Ts::operator()...;
+};
+template<class... Ts>
+overloaded(Ts...) -> overloaded<Ts...>;
 using namespace std::chrono_literals;
 
 /**
@@ -38,7 +43,8 @@ class IEventLoopCallbackHandler
 {
 public:
 	virtual void OnEventLoopCallback() = 0;
-	virtual ~IEventLoopCallbackHandler() {}
+	virtual ~IEventLoopCallbackHandler()
+	{}
 };
 
 /**
@@ -52,11 +58,11 @@ class IFiledescriptorCallbackHandler
 public:
 	virtual void OnFiledescriptorRead(int fd) = 0;
 	virtual void OnFiledescriptorWrite(int fd) = 0;
-	virtual ~IFiledescriptorCallbackHandler() {}
+	virtual ~IFiledescriptorCallbackHandler()
+	{}
 };
 
-class EventLoop
-	: Common::NonCopyable<EventLoop>
+class EventLoop : Common::NonCopyable<EventLoop>
 {
 public:
 	EventLoop();
@@ -64,18 +70,22 @@ public:
 	int Run();
 	void Stop();
 
-	enum class TimerType : std::uint8_t {
+	enum class TimerType : std::uint8_t
+	{
 		Oneshot = 0,
 		Repeating = 1
 	};
 
-	enum class TimerState : std::uint8_t {
+	enum class TimerState : std::uint8_t
+	{
 		Idle = 0,
 		Active = 1
 	};
 
 	// TODO Be able to update timer
 	// TODO Remove std::function in favor of template argument
+	// TODO Move timing to template instead of variant depending on whether we want to be able to update between
+	// timescales
 	struct Timer
 	{
 		using TimePoint = std::chrono::high_resolution_clock::time_point;
@@ -89,7 +99,7 @@ public:
 			, mState(TimerState::Active)
 			, mDuration(duration)
 			, mType(type)
-			, mCallback(callback)
+			, mCallback(std::move(callback))
 		{}
 
 		Timer(milliseconds duration, TimerType type, std::function<void()> callback)
@@ -97,16 +107,16 @@ public:
 			, mState(TimerState::Active)
 			, mDuration(duration)
 			, mType(type)
-			, mCallback(callback)
-			{}
+			, mCallback(std::move(callback))
+		{}
 
 		Timer(minutes duration, TimerType type, std::function<void()> callback)
 			: mEnd(static_cast<TimePoint>(Clock::now()) + duration)
 			, mState(TimerState::Active)
 			, mDuration(duration)
 			, mType(type)
-			, mCallback(callback)
-			{}
+			, mCallback(std::move(callback))
+		{}
 
 		Timer() = default;
 
@@ -117,11 +127,18 @@ public:
 
 		void UpdateDeadline() noexcept
 		{
-			std::visit(overloaded {
-				[this](seconds arg) {mEnd = static_cast<TimePoint>(Clock::now())+ arg;},
-				[this](milliseconds arg) {mEnd = static_cast<TimePoint>(Clock::now())+ arg;},
-				[this](minutes arg) {mEnd = static_cast<TimePoint>(Clock::now())+ arg;},
-			}, mDuration);
+			std::visit(overloaded{
+						   [this](seconds arg) {
+							   mEnd = static_cast<TimePoint>(Clock::now()) + arg;
+						   },
+						   [this](milliseconds arg) {
+							   mEnd = static_cast<TimePoint>(Clock::now()) + arg;
+						   },
+						   [this](minutes arg) {
+							   mEnd = static_cast<TimePoint>(Clock::now()) + arg;
+						   },
+					   },
+				mDuration);
 		}
 
 		bool operator==(const Timer& rhs) const noexcept
@@ -136,11 +153,12 @@ public:
 		std::function<void()> mCallback;
 	};
 
-	//TODO Add RemoveTimer function
+	// TODO Add RemoveTimer function
 	void AddTimer(Timer* timer);
 	void RemoveTimer(Timer* timer);
 
-	enum class LatencyType : std::uint8_t {
+	enum class LatencyType : std::uint8_t
+	{
 		Low = 0,
 		High = 1
 	};
@@ -151,7 +169,7 @@ public:
 	void RegisterFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler);
 	void ModifyFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler);
 	void UnregisterFiledescriptor(int fd);
-	bool IsRegistered(const int fd);
+	bool IsRegistered(int fd);
 
 	void EnableStatistics() noexcept;
 
@@ -196,7 +214,7 @@ private:
 	sigset_t mSigMask;
 	struct signalfd_siginfo mFDSI;
 
-	//int mTimerIterationCounter = 0;
+	// int mTimerIterationCounter = 0;
 
 	std::shared_ptr<cpptoml::table> mConfig;
 	std::shared_ptr<spdlog::logger> mLogger;
