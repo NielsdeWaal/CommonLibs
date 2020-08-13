@@ -887,6 +887,15 @@ private:
 				SendControlMessage(Opcode::PONG, msg->GetPayload().data(), msg->GetPayload().size());
 				mLogger->info("Sending PONG");
 			}
+			case Websocket::WebsocketDecoder::Opcode::PONG: {
+				mLogger->info("Received PONG");
+				const int comp = std::strcmp(std::string{data, len}.data(), mPingData.get());
+				if(comp != 0)
+				{
+					mLogger->error("PONG message returned wrong message, continuing for now");
+				}
+				mAwaitingPong = false;
+			}
 			}
 		}
 	}
