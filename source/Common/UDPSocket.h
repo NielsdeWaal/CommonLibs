@@ -1,9 +1,9 @@
 #ifndef UDPSOCKET_H
 #define UDPSOCKET_H
 
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
 
 #include "EventLoop.h"
 
@@ -19,14 +19,15 @@ using namespace EventLoop;
 
 class UDPSocket;
 
-//TODO Implement interface features
+// TODO Implement interface features
 class IUDPSocketHandler
 {
 public:
-	//virtual void OnConnected() = 0;
-	//virtual void OnDisconnect() = 0;
-	//virtual void OnIncomingData(char* data, size_t len) = 0;
-	virtual ~IUDPSocketHandler() {}
+	// virtual void OnConnected() = 0;
+	// virtual void OnDisconnect() = 0;
+	// virtual void OnIncomingData(char* data, size_t len) = 0;
+	virtual ~IUDPSocketHandler()
+	{}
 };
 
 class UDPSocket : public EventLoop::IFiledescriptorCallbackHandler
@@ -42,7 +43,7 @@ public:
 		fcntl(mFd, F_SETFL, O_NONBLOCK);
 	}
 
-	void SetDefaultAddress(const char* addr) noexcept
+	void SetDefaultAddress([[maybe_unused]] const char* addr) noexcept
 	{
 		mAddrSet = true;
 	}
@@ -57,27 +58,25 @@ public:
 		assert(port > 0);
 
 		remote.sin_addr.s_addr = ::inet_addr(addr);
-		//remote.sin_addr.s_addr = addr;
+		// remote.sin_addr.s_addr = addr;
 		remote.sin_family = AF_INET;
 		remote.sin_port = htons(port);
 
-		const int ret = ::connect(mFd, (struct sockaddr *)&remote, sizeof(struct sockaddr));
+		const int ret = ::connect(mFd, (struct sockaddr*)&remote, sizeof(struct sockaddr));
 
-		//TODO Handle error case
+		// TODO Handle error case
 		if((ret == -1) && (errno == EINPROGRESS))
 		{
 			mLogger->critical("Connect failed, code:{}", ret);
-			//throw std::runtime_error("Connect failed");
-			//mEventLoop.RegisterFiledescriptor(mFd, EPOLLIN | EPOLLOUT, this);
+			// throw std::runtime_error("Connect failed");
+			// mEventLoop.RegisterFiledescriptor(mFd, EPOLLIN | EPOLLOUT, this);
 		}
 
 		mPort = port;
 	}
 
-	void StartListening(const char* localAddr, const uint16_t localPort) noexcept
-	{
-
-	}
+	void StartListening([[maybe_unused]] const char* localAddr, [[maybe_unused]] const uint16_t localPort) noexcept
+	{}
 
 	void Send(const char* data, size_t len, const char* dst = nullptr, const uint16_t port = 0) const noexcept
 	{
@@ -95,7 +94,8 @@ public:
 				tempRemote.sin_port = htons(port);
 			}
 
-			const auto ret = ::sendto(mFd, data, len, MSG_DONTWAIT, (struct sockaddr *)&tempRemote, sizeof(struct sockaddr));
+			const auto ret =
+				::sendto(mFd, data, len, MSG_DONTWAIT, (struct sockaddr*)&tempRemote, sizeof(struct sockaddr));
 
 			if((ret == -1) && (errno == EINPROGRESS))
 			{
@@ -114,15 +114,11 @@ public:
 	}
 
 private:
-	void OnFiledescriptorWrite(int fd) final
-	{
+	void OnFiledescriptorWrite([[maybe_unused]] int fd) final
+	{}
 
-	}
-
-	void OnFiledescriptorRead(int fd) final
-	{
-
-	}
+	void OnFiledescriptorRead([[maybe_unused]] int fd) final
+	{}
 
 private:
 	EventLoop::EventLoop& mEventLoop;

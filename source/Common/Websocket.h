@@ -20,41 +20,11 @@ struct WebsocketDecoder
 {
 public:
 	explicit WebsocketDecoder(EventLoop::EventLoop& ev)
-		: mBuffer(nullptr)
-		, mIndex(0)
-		, mBufferSize(0)
+		: mRemaining(BASIC_HEADER_LENGTH)
 		, mState(State::HEADER_BASIC)
-		, mRemaining(BASIC_HEADER_LENGTH)
 	{
 		mLogger = ev.RegisterLogger("WebsocketDecoder");
 	}
-	WebsocketDecoder(EventLoop::EventLoop& ev, std::uint8_t* buffer, std::size_t bufferSize)
-		: mBuffer(buffer)
-		, mIndex(0)
-		, mBufferSize(bufferSize)
-	{
-		mLogger = ev.RegisterLogger("WebsocketDecoder");
-	}
-
-	WebsocketDecoder(EventLoop::EventLoop& ev, std::vector<std::uint8_t>& buffer)
-		: mBuffer(buffer.data())
-		, mIndex(0)
-		, mBufferSize(buffer.size())
-	{
-		mLogger = ev.RegisterLogger("WebsocketDecoder");
-	}
-
-	// explicit WebsocketDecoder(EventLoop::EventLoop& ev)
-	// {
-	// 	mLogger = ev.RegisterLogger("WebsocketDecoder");
-	// }
-
-	// void SetBuffer(std::uint8_t* buffer, std::size_t bufferSize)
-	// {
-	// 	mBuffer = buffer;
-	// 	mBufferSize = bufferSize;
-	// }
-
 	enum Opcode : std::uint8_t
 	{
 		CONTINUATION = 0x0,
@@ -568,15 +538,6 @@ public:
 		std::unique_ptr<Message> ret = std::move(mCurrentMessage->mMsg);
 		mCurrentMessage->mMsg.reset();
 
-		// if(IsControl(ret->GetOpcode()))
-		// {
-		// 	mControlMessage->mMsg.reset();
-		// }
-		// else
-		// {
-		// 	mDataMessage->mMsg.reset();
-		// }
-
 		ResetHeaders();
 
 		return ret;
@@ -696,113 +657,10 @@ public:
 		return (mState == State::READY);
 	}
 
-	MessageState DecodeMessage(std::vector<std::uint8_t>& dest)
-	{
-		if(mIndex + 1 >= mBufferSize)
-		{
-			return MessageState::NoMessage;
-		}
-		if((mBuffer[mIndex] & 0x80) == 0)
-		{
-			// FIN bit is not clear...
-			mLogger->warn("Received websocket frame without FIN bit set - unsupported");
-			return MessageState::Error;
-		}
-
-		const auto reservedBits = mBuffer[mIndex] & (7 << 4);
-		if((reservedBits & 0x30) != 0)
-		{
-			mLogger->warn("Received websocket frame with reserved bits set - error");
-			return MessageState::Error;
-		}
-
-		const auto opcode = static_cast<Opcode>(mBuffer[mIndex] & 0xf);
-		size_t payloadLength = mBuffer[mIndex + 1] & 0x7fu;
-		const auto maskBit = mBuffer[mIndex + 1] & 0x80;
-		auto ptr = mIndex + 2;
-		if(payloadLength == 126)
-		{
-			if(mBufferSize < 4)
-			{
-				return MessageState::NoMessage;
-			}
-			uint16_t raw_length = 0;
-			std::memcpy(&raw_length, &mBuffer[ptr], sizeof(raw_length));
-			payloadLength = htons(raw_length);
-			ptr += 2;
-		}
-		else if(payloadLength == 127)
-		{
-			if(mBufferSize < 10)
-			{
-				return MessageState::NoMessage;
-			}
-			std::uint64_t raw_length = 0;
-			std::memcpy(&raw_length, &mBuffer[ptr], sizeof(raw_length));
-			payloadLength = __bswap_64(raw_length);
-			ptr += 8;
-		}
-		uint32_t mask = 0;
-		if(maskBit)
-		{
-			// MASK is set.
-			if(mBufferSize < ptr + 4)
-			{
-				mLogger->warn("BufferSize < ptr + 4");
-				return MessageState::NoMessage;
-			}
-			std::uint32_t raw_length = 0;
-			std::memcpy(&raw_length, &mBuffer[ptr], sizeof(raw_length));
-			mask = htonl(raw_length);
-			ptr += 4;
-		}
-		auto bytesLeftInBuffer = mBufferSize - ptr;
-		if(payloadLength > bytesLeftInBuffer)
-		{
-			mLogger->warn("payloadLength > bytesLeftInBuffer, bytes missing: {}", payloadLength - bytesLeftInBuffer);
-			std::memcpy(mFragmentationBuffer.data(), &mBuffer[ptr], payloadLength);
-			return MessageState::PartialMessage;
-		}
-
-		dest.clear();
-		dest.reserve(payloadLength);
-		for(auto i = 0u; i < payloadLength; ++i)
-		{
-			auto byteShift = (3 - (i & 3)) * 8;
-			dest.push_back(static_cast<uint8_t>((mBuffer[ptr++] ^ (mask >> byteShift)) & 0xff));
-		}
-		mIndex = ptr;
-		switch(opcode)
-		{
-		default:
-			mLogger->warn("Received hybi frame with unknown opcode: {}", static_cast<int>(opcode));
-			return MessageState::Error;
-		case Opcode::TEXT:
-			return MessageState::TextMessage;
-		case Opcode::BINARY:
-			return MessageState::BinaryMessage;
-		case Opcode::PING:
-			return MessageState::Ping;
-		case Opcode::PONG:
-			return MessageState::Pong;
-		case Opcode::CLOSE:
-			return MessageState::Close;
-		}
-	}
-
-	[[nodiscard]] std::size_t GetNumBytesDecoded() const
-	{
-		return mIndex;
-	}
-
 private:
 	std::shared_ptr<spdlog::logger> mLogger;
-	std::uint8_t* mBuffer;
-	std::size_t mIndex;
-	std::size_t mBufferSize;
-	std::vector<std::uint8_t> mFragmentationBuffer;
 
-	std::size_t mRemaining = 0;
+	std::size_t mRemaining;
 	std::size_t mCursor;
 	State mState;
 	BasicHeader mBasicHeader;
@@ -827,8 +685,9 @@ private:
 
 public:
 	virtual void OnConnected() = 0;
-	virtual void OnDisconnect(WebsocketClient<SocketType, Handler>* conn) = 0;
-	virtual void OnIncomingData(WebsocketClient<SocketType, Handler>* conn, char* data, size_t len) = 0;
+	virtual void OnDisconnect([[maybe_unused]] WebsocketClient<SocketType, Handler>* conn) = 0;
+	virtual void OnIncomingData(
+		[[maybe_unused]] WebsocketClient<SocketType, Handler>* conn, const char* data, size_t len) = 0;
 	virtual ~IWebsocketClientHandler() = default;
 	// IWebsocketClientHandler(const IWebsocketClientHandler&) = delete;
 	// IWebsocketClientHandler& operator=(const IWebsocketClientHandler&) = delete;
@@ -843,6 +702,7 @@ public:
  * and if specified use another port.
  * TODO Better connect string solution. Now we just construct one roughly without any thought.
  * TODO Ping timeout, maybe with config option. Just a normal eventloop timer should suffice.
+ * TODO Actuall HTTP handler
  */
 
 template<typename SocketType, typename Handler>
@@ -879,8 +739,8 @@ public:
 		, mHandler(handler)
 		, mSocket(ev, this)
 		, mPort(0)
-		// , mDecoder(ev)
 		, mConnected(false)
+		, mDecoder(ev)
 	{
 		mLogger = mEventLoop.RegisterLogger("WebsocketClient");
 	}
@@ -943,6 +803,7 @@ public:
 		header.assign(2 + (len >= 126 ? 2 : 0) + (len >= 65536 ? 6 : 0), 0);
 
 		std::string payload;
+		payload.reserve(header.size() + len);
 		const char* startPointer = data;
 		const char* endPointer = startPointer + len;
 
@@ -987,7 +848,7 @@ private:
 		StartWebsocketConnection();
 	}
 
-	void OnDisconnect(SocketType* conn)
+	void OnDisconnect([[maybe_unused]] SocketType* conn)
 	{
 		mLogger->warn("Connection to TCP endpoint closed");
 	}
@@ -1009,42 +870,22 @@ private:
 			return;
 		}
 
-		// const uint8_t* dataPtr = (uint8_t*)data;
-
-		Websocket::WebsocketDecoder decoder(mEventLoop, (std::uint8_t*)data, len);
-		Websocket::WebsocketDecoder::MessageState state;
-		std::vector<std::uint8_t> dest;
-		dest.reserve(512);
-		while(true)
+		mDecoder.ConsumeMessage((std::uint8_t*)data, len);
+		if(mDecoder.Ready())
 		{
-			state = decoder.DecodeMessage(dest);
-			switch(state)
+			const auto msg = mDecoder.GetMessage();
+			const auto& op = msg->GetOpcode();
+			switch(op)
 			{
-			case Websocket::WebsocketDecoder::MessageState::TextMessage:
-			// {
-			// 	mHandler->OnIncomingData(this, (char*)dest.data(), dest.size());
-			// 	break;
-			// }
-			case Websocket::WebsocketDecoder::MessageState::BinaryMessage: {
-				mHandler->OnIncomingData(this, (char*)dest.data(), dest.size());
+			case Websocket::WebsocketDecoder::Opcode::BINARY:
+				[[fallthrough]];
+			case Websocket::WebsocketDecoder::Opcode::TEXT: {
+				mHandler->OnIncomingData(this, msg->GetPayload().data(), msg->GetPayload().size());
 				return;
 			}
-			case Websocket::WebsocketDecoder::MessageState::PartialMessage: {
-				mLogger->warn("Partial message received");
-				return;
-			}
-			case Websocket::WebsocketDecoder::MessageState::NoMessage: {
-				mLogger->warn("NoMessage");
-				return;
-			}
-			case Websocket::WebsocketDecoder::MessageState::Error: {
-				mLogger->critical("Error state");
-				throw std::runtime_error("error state returned from websocket decoder");
-				return;
-			}
-			default: {
-				mLogger->error("Unhandled messagestate");
-				return;
+			case Websocket::WebsocketDecoder::Opcode::PING: {
+				SendControlMessage(Opcode::PONG, msg->GetPayload().data(), msg->GetPayload().size());
+				mLogger->info("Sending PONG");
 			}
 			}
 		}
@@ -1124,6 +965,8 @@ private:
 	std::unique_ptr<char[]> mPingData;
 	// TODO currenty this isn't used, but this should be used in a timeout
 	bool mAwaitingPong = false;
+
+	Websocket::WebsocketDecoder mDecoder;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };

@@ -1,12 +1,12 @@
 #ifndef TLS_SOCKET_H
 #define TLS_SOCKET_H
 
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <netdb.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
-#include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <openssl/ssl.h>
 
 namespace Common {
 
@@ -16,9 +16,10 @@ class ITLSSocketHandler
 {
 public:
 	virtual void OnConnected() = 0;
-	virtual void OnDisconnect(TLSSocket* conn) = 0;
-	virtual void OnIncomingData(TLSSocket* conn, char* data, std::size_t len) = 0;
-	virtual ~ITLSSocketHandler() {}
+	virtual void OnDisconnect([[maybe_unused]] TLSSocket* conn) = 0;
+	virtual void OnIncomingData([[maybe_unused]] TLSSocket* conn, char* data, std::size_t len) = 0;
+	virtual ~ITLSSocketHandler()
+	{}
 };
 
 /**
@@ -41,9 +42,9 @@ public:
 
 		SSL_library_init();
 
-		OpenSSL_add_all_algorithms();  /* Load cryptos, et.al. */
-		SSL_load_error_strings();   /* Bring in and register error messages */
-		mSSLMethod = TLS_client_method();  /* Create new client-method instance */
+		OpenSSL_add_all_algorithms();     /* Load cryptos, et.al. */
+		SSL_load_error_strings();         /* Bring in and register error messages */
+		mSSLMethod = TLS_client_method(); /* Create new client-method instance */
 		mCTX = SSL_CTX_new(mSSLMethod);   /* Create new context */
 		if(!mCTX)
 		{
@@ -56,7 +57,6 @@ public:
 		mSSL = SSL_new(mCTX);
 
 		SSL_set_fd(mSSL, mFd);
-
 	}
 
 	~TLSSocket()
@@ -74,17 +74,17 @@ public:
 	void Connect(const char* addr, const uint16_t port) noexcept
 	{
 		remote.sin_addr.s_addr = ::inet_addr(addr);
-		//remote.sin_addr.s_addr = addr;
+		// remote.sin_addr.s_addr = addr;
 		remote.sin_family = AF_INET;
 		remote.sin_port = htons(port);
 
-		const int ret = ::connect(mFd, (struct sockaddr *)&remote, sizeof(struct sockaddr));
+		const int ret = ::connect(mFd, (struct sockaddr*)&remote, sizeof(struct sockaddr));
 
-		//TODO Handle error case
+		// TODO Handle error case
 		if((ret == -1) && (errno == EINPROGRESS))
 		{
-			//mLogger->critical("Connect failed, code:{}", ret);
-			//throw std::runtime_error("Connect failed");
+			// mLogger->critical("Connect failed, code:{}", ret);
+			// throw std::runtime_error("Connect failed");
 			mEventLoop.RegisterFiledescriptor(mFd, EPOLLIN | EPOLLOUT, this);
 		}
 		else
@@ -97,7 +97,7 @@ public:
 	void ConnectHostname(const std::string& url, const uint16_t port) noexcept
 	{
 		struct addrinfo hints;
-		struct addrinfo *infoptr;
+		struct addrinfo* infoptr;
 		memset(&hints, 0, sizeof hints);
 		hints.ai_family = AF_INET;       // AF_INET means IPv4 only addresses
 		hints.ai_socktype = SOCK_STREAM; // Only want stream-based connection
@@ -111,7 +111,7 @@ public:
 		}
 
 		char host[256];
-		getnameinfo(infoptr->ai_addr, infoptr->ai_addrlen, host, sizeof (host), NULL, 0, NI_NUMERICHOST);
+		getnameinfo(infoptr->ai_addr, infoptr->ai_addrlen, host, sizeof(host), NULL, 0, NI_NUMERICHOST);
 		mLogger->info("Resolved {} to {}", url, std::string{host});
 
 		Connect(host, port);
@@ -172,11 +172,11 @@ private:
 			int err = 0;
 			socklen_t len = sizeof(int);
 			const int status = ::getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len);
-			if (status != -1)
+			if(status != -1)
 			{
-				if (err == 0)
+				if(err == 0)
 				{
-					//mEventLoop.ModifyFiledescriptor(fd, EPOLLIN | EPOLLRDHUP, this);
+					// mEventLoop.ModifyFiledescriptor(fd, EPOLLIN | EPOLLRDHUP, this);
 					mConnected = true;
 					mLogger->info("Connection establisched on fd:{}, starting SSL handshake", fd);
 					const int ret = SSL_connect(mSSL);
@@ -189,7 +189,7 @@ private:
 							return;
 						}
 					}
-					//mHandler->OnConnected();
+					// mHandler->OnConnected();
 				}
 				else
 				{
@@ -205,8 +205,7 @@ private:
 			if(ret < 0)
 			{
 				const auto err = SSL_get_error(mSSL, ret);
-				if(err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE ||
-					 err == SSL_ERROR_WANT_X509_LOOKUP)
+				if(err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE || err == SSL_ERROR_WANT_X509_LOOKUP)
 				{
 					return;
 				}
@@ -230,8 +229,7 @@ private:
 			if(ret < 0)
 			{
 				const int err = SSL_get_error(mSSL, ret);
-				if(err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE ||
-					 err == SSL_ERROR_WANT_X509_LOOKUP)
+				if(err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE || err == SSL_ERROR_WANT_X509_LOOKUP)
 				{
 					return;
 				}
@@ -252,8 +250,7 @@ private:
 			}
 
 			const int err = SSL_get_error(mSSL, len);
-			if(err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE ||
-				 err == SSL_ERROR_WANT_X509_LOOKUP)
+			if(err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE || err == SSL_ERROR_WANT_X509_LOOKUP)
 			{
 				return;
 			}
@@ -286,14 +283,14 @@ private:
 	// std::array<char, 65535> readBuf = {0};
 	std::unique_ptr<std::array<char, 65535>> readBuf;
 
-	//SSL/TLS relevant members
-	const SSL_METHOD *mSSLMethod;
+	// SSL/TLS relevant members
+	const SSL_METHOD* mSSLMethod;
 	SSL_CTX* mCTX;
 	SSL* mSSL;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
 
-}
+} // namespace Common
 
 #endif // TLS_SOCKET_H

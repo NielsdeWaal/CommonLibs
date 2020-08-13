@@ -13,15 +13,16 @@ class IStreamSocketHandler
 {
 public:
 	virtual void OnConnected() = 0;
-	virtual void OnDisconnect(StreamSocket* conn) = 0;
-	virtual void OnIncomingData(StreamSocket* conn, char* data, size_t len) = 0;
-	virtual ~IStreamSocketHandler() {}
+	virtual void OnDisconnect([[maybe_unused]] StreamSocket* conn) = 0;
+	virtual void OnIncomingData([[maybe_unused]] StreamSocket* conn, char* data, size_t len) = 0;
+	virtual ~IStreamSocketHandler()
+	{}
 };
 
 class StreamSocket : public EventLoop::IFiledescriptorCallbackHandler
 {
 public:
-	//StreamSocket(uint32_t addr, uint16_t port)
+	// StreamSocket(uint32_t addr, uint16_t port)
 	//	: mAddress(addr)
 	//	, mPort(port)
 	//{}
@@ -56,21 +57,21 @@ public:
 		}
 	}
 
-	//void Connect(uint32_t addr, uint16_t port)
+	// void Connect(uint32_t addr, uint16_t port)
 	void Connect(const char* addr, const uint16_t port) noexcept
 	{
 		remote.sin_addr.s_addr = ::inet_addr(addr);
-		//remote.sin_addr.s_addr = addr;
+		// remote.sin_addr.s_addr = addr;
 		remote.sin_family = AF_INET;
 		remote.sin_port = htons(port);
 
-		const int ret = ::connect(mFd, (struct sockaddr *)&remote, sizeof(struct sockaddr));
+		const int ret = ::connect(mFd, (struct sockaddr*)&remote, sizeof(struct sockaddr));
 
-		//TODO Handle error case
+		// TODO Handle error case
 		if((ret == -1) && (errno == EINPROGRESS))
 		{
-			//mLogger->critical("Connect failed, code:{}", ret);
-			//throw std::runtime_error("Connect failed");
+			// mLogger->critical("Connect failed, code:{}", ret);
+			// throw std::runtime_error("Connect failed");
 			mEventLoop.RegisterFiledescriptor(mFd, EPOLLIN | EPOLLOUT, this);
 		}
 		else
@@ -160,7 +161,6 @@ public:
 	}
 
 private:
-
 	void OnFiledescriptorWrite(int fd) final
 	{
 		if(!mConnected)
@@ -168,9 +168,9 @@ private:
 			int err = 0;
 			socklen_t len = sizeof(int);
 			int status = ::getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len);
-			if (status != -1)
+			if(status != -1)
 			{
-				if (err == 0)
+				if(err == 0)
 				{
 					mEventLoop.ModifyFiledescriptor(fd, EPOLLIN | EPOLLRDHUP, this);
 					mConnected = true;
@@ -187,14 +187,13 @@ private:
 		}
 		else if(mSendInProgress)
 		{
-
 		}
-		else //TODO Make check for connection after sending data i.e check for ack
+		else // TODO Make check for connection after sending data i.e check for ack
 		{
-			//mLogger->info("Connection has shutdown, closing socket");
+			// mLogger->info("Connection has shutdown, closing socket");
 			//::close(mFd);
-			//mEventLoop.UnregisterFiledescriptor(mFd);
-			//mConnected = false;
+			// mEventLoop.UnregisterFiledescriptor(mFd);
+			// mConnected = false;
 		}
 	}
 
@@ -222,7 +221,7 @@ private:
 	struct sockaddr_in remote;
 
 	uint32_t mAddress = 0;
-	//uint16_t mPort = 0;
+	// uint16_t mPort = 0;
 
 	bool mConnected = false;
 	bool mSendInProgress = false;
@@ -236,7 +235,8 @@ class IStreamSocketServerHandler
 {
 public:
 	virtual IStreamSocketHandler* OnIncomingConnection() = 0;
-	virtual ~IStreamSocketServerHandler() {}
+	virtual ~IStreamSocketServerHandler()
+	{}
 };
 
 class StreamSocketServer : public EventLoop::IFiledescriptorCallbackHandler
@@ -251,7 +251,8 @@ public:
 		mFd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 
 		int reuseaddrOption = 1;
-		if (::setsockopt(mFd, SOL_SOCKET, SO_REUSEADDR, &reuseaddrOption, sizeof(reuseaddrOption)) == -1 ) {
+		if(::setsockopt(mFd, SOL_SOCKET, SO_REUSEADDR, &reuseaddrOption, sizeof(reuseaddrOption)) == -1)
+		{
 			mLogger->error("Unable to set options on server socket");
 			throw std::runtime_error("Unable to set options on server socket");
 		}
@@ -269,13 +270,14 @@ public:
 
 	void BindAndListen(uint16_t port)
 	{
-		//const uint16_t port = ::atoi(port);
+		// const uint16_t port = ::atoi(port);
 		sockaddr_in addr{};
 		addr.sin_family = AF_INET;
 		addr.sin_port = ::htons(port);
 		addr.sin_addr.s_addr = INADDR_ANY;
 
-		if(::bind(mFd, reinterpret_cast<struct sockaddr *>(&addr), sizeof(sockaddr_in)) == -1) {
+		if(::bind(mFd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(sockaddr_in)) == -1)
+		{
 			mLogger->critical("Unable to bind address to socket");
 			throw std::runtime_error("Unable to bind address to socket");
 		}
@@ -294,7 +296,7 @@ public:
 	void Shutdown()
 	{
 		mLogger->info("Shutting down streamsocket server");
-		for(const auto& conn : mConnections)
+		for(const auto& conn: mConnections)
 		{
 			conn->Shutdown();
 		}
@@ -307,10 +309,10 @@ private:
 	{
 		sockaddr_in remote;
 		socklen_t len = sizeof(sockaddr_in);
-		int ret = ::accept(fd, reinterpret_cast<sockaddr *>(&remote), &len);
-		if (ret == -1)
+		int ret = ::accept(fd, reinterpret_cast<sockaddr*>(&remote), &len);
+		if(ret == -1)
 		{
-			if ((errno == EAGAIN) || (errno == EWOULDBLOCK))
+			if((errno == EAGAIN) || (errno == EWOULDBLOCK))
 			{
 				mLogger->warn("Incoming connection already closed");
 			}
@@ -325,7 +327,7 @@ private:
 			auto connHandler = mHandler->OnIncomingConnection();
 			if(connHandler != nullptr)
 			{
-				//mConnections.push_back(StreamSocket(mEventLoop, ret, connHandler));
+				// mConnections.push_back(StreamSocket(mEventLoop, ret, connHandler));
 				mConnections.push_back(std::make_unique<StreamSocket>(mEventLoop, ret, connHandler));
 			}
 			else
@@ -336,7 +338,7 @@ private:
 		}
 	}
 
-	void OnFiledescriptorWrite(int fd) final
+	void OnFiledescriptorWrite([[maybe_unused]] int fd) final
 	{}
 
 	EventLoop::EventLoop& mEventLoop;
@@ -344,12 +346,13 @@ private:
 
 	int mFd = 0;
 
-	//std::vector<StreamSocket> mConnections;
-	std::vector<std::unique_ptr<StreamSocket>> mConnections; //TODO This is dumb, user can not access the actual connection
+	// std::vector<StreamSocket> mConnections;
+	std::vector<std::unique_ptr<StreamSocket>>
+		mConnections; // TODO This is dumb, user can not access the actual connection
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
 
-}
+} // namespace Common
 
 #endif // STREAMSOCKET_H

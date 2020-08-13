@@ -1,14 +1,13 @@
 #include <catch2/catch.hpp>
 
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
 
 #include <csignal>
 
 #include "EventLoop.h"
 #include "StreamSocket.h"
-
 
 TEST_CASE("TCP Read And Write", "[Eventloop TCP]")
 {
@@ -19,7 +18,8 @@ TEST_CASE("TCP Read And Write", "[Eventloop TCP]")
 	const std::string localAddress{"127.0.0.1"};
 	const std::uint16_t localPort = 1337;
 
-	struct Server : public Common::IStreamSocketServerHandler
+	struct Server
+		: public Common::IStreamSocketServerHandler
 		, public Common::IStreamSocketHandler
 	{
 		Server(EventLoop::EventLoop& ev, std::uint16_t bindPort)
@@ -37,10 +37,10 @@ TEST_CASE("TCP Read And Write", "[Eventloop TCP]")
 		void OnConnected() final
 		{}
 
-		void OnDisconnect(Common::StreamSocket* conn) final
+		void OnDisconnect([[maybe_unused]] Common::StreamSocket* conn) final
 		{}
 
-		void OnIncomingData(Common::StreamSocket* conn, char* data, std::size_t len) final
+		void OnIncomingData([[maybe_unused]] Common::StreamSocket* conn, char* data, std::size_t len) final
 		{
 			REQUIRE(conn->IsConnected());
 			REQUIRE(std::string{data, len} == "abc");
@@ -63,17 +63,18 @@ TEST_CASE("TCP Read And Write", "[Eventloop TCP]")
 
 		void OnConnected() final
 		{
-			auto dataWrite = std::unique_ptr<char[]>(new char[3]{'a','b','c'});
+			auto dataWrite = std::unique_ptr<char[]>(new char[3]{'a', 'b', 'c'});
 			mSocket.Send(dataWrite.get(), 3);
 		}
 
-		void OnDisconnect(Common::StreamSocket* conn) final
+		void OnDisconnect([[maybe_unused]] Common::StreamSocket* conn) final
 		{
 			REQUIRE(conn->IsConnected() == false);
 			std::raise(SIGINT);
 		}
 
-		void OnIncomingData(Common::StreamSocket* conn, char* data, std::size_t len) final
+		void OnIncomingData([[maybe_unused]] Common::StreamSocket* conn, [[maybe_unused]] char* data,
+			[[maybe_unused]] std::size_t len) final
 		{}
 
 	private:
@@ -96,7 +97,8 @@ TEST_CASE("TCP PeerId", "[Eventloop TCP]")
 	const std::string localAddress{"127.0.0.1"};
 	const std::uint16_t localPort = 1337;
 
-	struct Server : public Common::IStreamSocketServerHandler
+	struct Server
+		: public Common::IStreamSocketServerHandler
 		, public Common::IStreamSocketHandler
 	{
 		Server(EventLoop::EventLoop& ev, std::uint16_t bindPort)
@@ -114,10 +116,11 @@ TEST_CASE("TCP PeerId", "[Eventloop TCP]")
 		void OnConnected() final
 		{}
 
-		void OnDisconnect(Common::StreamSocket* conn) final
+		void OnDisconnect([[maybe_unused]] Common::StreamSocket* conn) final
 		{}
 
-		void OnIncomingData(Common::StreamSocket* conn, char* data, std::size_t len) final
+		void OnIncomingData([[maybe_unused]] Common::StreamSocket* conn, [[maybe_unused]] char* data,
+			[[maybe_unused]] std::size_t len) final
 		{
 			conn->Shutdown();
 		}
@@ -149,13 +152,14 @@ TEST_CASE("TCP PeerId", "[Eventloop TCP]")
 			mSocket.Send(dataWrite.get(), 1);
 		}
 
-		void OnDisconnect(Common::StreamSocket* conn) final
+		void OnDisconnect([[maybe_unused]] Common::StreamSocket* conn) final
 		{
 			REQUIRE(conn->IsConnected() == false);
 			std::raise(SIGINT);
 		}
 
-		void OnIncomingData(Common::StreamSocket* conn, char* data, std::size_t len) final
+		void OnIncomingData([[maybe_unused]] Common::StreamSocket* conn, [[maybe_unused]] char* data,
+			[[maybe_unused]] std::size_t len) final
 		{}
 
 	private:
