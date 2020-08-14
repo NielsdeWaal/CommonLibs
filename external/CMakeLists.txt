@@ -86,8 +86,10 @@ ExternalHeaderOnly_Add(Catch
     "https://github.com/catchorg/Catch2.git" "origin/master" "single_include/catch2")
 
 #------------------------------------------------------------------------------
-# ExternalHeaderOnly_Add(json
-#     "https://github.com/nlohmann/json.git" "origin/master" "single_include")
+# target_link_libraries (exampleApp PRIVATE json)
+# #include <nlohmann/json.hpp>
+ExternalHeaderOnly_Add(json
+    "https://github.com/nlohmann/json.git" "master" "single_include")
 
 #------------------------------------------------------------------------------
 # target_link_libraries (exampleApp PRIVATE spdlog)
