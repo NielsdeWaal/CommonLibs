@@ -205,7 +205,7 @@ private:
 	const int mEpollFd = 0;
 	int mEpollReturn = 0;
 	struct epoll_event mEpollEvents[MaxEpollEvents];
-	std::unordered_map<int, IFiledescriptorCallbackHandler*> mFdHandlers;
+	std::vector<IFiledescriptorCallbackHandler*> mFdHandlers;
 	int mEpollTimeout = 0;
 	// void CleanupTimers();
 	// Single timer class with enum state dictating if timer is repeating or not
