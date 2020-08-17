@@ -4,6 +4,7 @@
 #include <spdlog/fmt/ostr.h>
 
 #include "EventLoop.h"
+#include "TSC.h"
 #include "UDPSocket.h"
 
 #include <chrono>
@@ -11,8 +12,13 @@
 
 namespace StatWriter {
 
-template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
-template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+template<class... Ts>
+struct overloaded : Ts...
+{
+	using Ts::operator()...;
+};
+template<class... Ts>
+overloaded(Ts...) -> overloaded<Ts...>;
 
 using namespace std::string_literals;
 
@@ -33,7 +39,7 @@ private:
 		std::chrono::time_point<std::chrono::high_resolution_clock> mTimestamp;
 
 		template<typename OStream>
-		friend OStream &operator<<(OStream &os, const InfluxDBLine &l)
+		friend OStream& operator<<(OStream& os, const InfluxDBLine& l)
 		{
 			if(l.mTagSet != "")
 			{
@@ -59,7 +65,8 @@ private:
 			ret += mFieldSet;
 
 			ret += " ";
-			ret += std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(mTimestamp.time_since_epoch()).count());
+			ret += std::to_string(
+				std::chrono::duration_cast<std::chrono::nanoseconds>(mTimestamp.time_since_epoch()).count());
 
 			return ret;
 		}
@@ -79,7 +86,7 @@ public:
 		mServerPort = port;
 	}
 
-	void SetBatchWriting(std::chrono::seconds interval) noexcept
+	void SetBatchWriting(Common::MONOTONIC_TIME interval) noexcept
 	{
 		if(mTimerSet)
 		{
@@ -88,19 +95,18 @@ public:
 		}
 		mBatchInterval = interval;
 
-		mTimer = EventLoop::EventLoop::Timer(interval,
-					EventLoop::EventLoop::TimerType::Repeating,
-					[this] { WriteBatch(); });
+		mTimer = EventLoop::EventLoop::Timer(interval, EventLoop::EventLoop::TimerType::Repeating, [this] {
+			WriteBatch();
+		});
 
 		mEventLoop.AddTimer(&mTimer);
 		mTimerSet = true;
 	}
 
 	void AddMultipleToGroupInBatch(const std::string& group,
-								const std::unordered_map<std::string,
-								std::function<std::variant<int,float>()>>& getters) noexcept
+		const std::unordered_map<std::string, std::function<std::variant<int, float>()>>& getters) noexcept
 	{
-		for(const auto& [label, getter] : getters)
+		for(const auto& [label, getter]: getters)
 		{
 			mBatchMeasurements[group][label] = getter;
 			mLogger->info("Added field: {} to group: {}", label, group);
@@ -128,50 +134,58 @@ public:
 	 * @issue The issue with the current setup is that it only excepts integers returns.
 	 * This should be fixable with variants.
 	 */
-	void AddFieldToGroup(const std::string& group,
-						const std::string& label,
-						const std::function<std::variant<int,float>()> getter) noexcept;
+	void AddFieldToGroup(const std::string& group, const std::string& label,
+		const std::function<std::variant<int, float>()> getter) noexcept;
 
-  /**
-   * @brief Sends state directly to TSDB
-   */
-	void SendFieldAndGroupImidiate(const std::string& group,
-									const std::string& label,
-									const std::variant<int,float>& value) const noexcept
+	/**
+	 * @brief Sends state directly to TSDB
+	 */
+	void SendFieldAndGroupImidiate(
+		const std::string& group, const std::string& label, const std::variant<int, float>& value) const noexcept
 	{
 		InfluxDBLine line;
 
 		line.mTimestamp = std::chrono::high_resolution_clock::now();
 		line.mMeasurement = group;
-		std::visit(overloaded {
-				[&line, &label](int arg) { line.mFieldSet = label + "=" + std::to_string(arg); },
-				[&line, &label](float arg) { line.mFieldSet = label + "=" + std::to_string(arg); },
-				}, value);
+		std::visit(overloaded{
+					   [&line, &label](int arg) {
+						   line.mFieldSet = label + "=" + std::to_string(arg);
+					   },
+					   [&line, &label](float arg) {
+						   line.mFieldSet = label + "=" + std::to_string(arg);
+					   },
+				   },
+			value);
 
 		const auto data = line.GetLine();
 		mLogger->info("Sending value: {} to {} now", line.mFieldSet, group);
 		mSocket.Send(data.c_str(), data.size(), mServerAddress.c_str(), mServerPort);
 	}
 
-  /**
-   * @brief Send values directly to TSDB
-   */
+	/**
+	 * @brief Send values directly to TSDB
+	 */
 	void SendFieldAndGroupImidiate(const std::string& group,
-								 const std::unordered_map<std::string, std::variant<int,float>>& values) const noexcept
+		const std::unordered_map<std::string, std::variant<int, float>>& values) const noexcept
 	{
 		InfluxDBLine line;
 
 		line.mTimestamp = std::chrono::high_resolution_clock::now();
 		line.mMeasurement = group;
 		std::vector<std::string> formattedValues;
-		for(const auto& [metric,value] : values)
+		for(const auto& [metric, value]: values)
 		{
 			std::string metricValue = "";
-			std::visit(overloaded {
-					[&metricValue](int arg) { metricValue = std::to_string(arg); },
-					[&metricValue](float arg) { metricValue = std::to_string(arg); },
-						}, value);
-			formattedValues.push_back(metric+ "=" + metricValue);
+			std::visit(overloaded{
+						   [&metricValue](int arg) {
+							   metricValue = std::to_string(arg);
+						   },
+						   [&metricValue](float arg) {
+							   metricValue = std::to_string(arg);
+						   },
+					   },
+				value);
+			formattedValues.push_back(metric + "=" + metricValue);
 		}
 		line.mFieldSet = fmt::format("{}", fmt::join(formattedValues, ","));
 	}
@@ -189,13 +203,18 @@ private:
 	{
 		const auto& currentBatch = mBatchMeasurements[group];
 		std::vector<std::string> values;
-		for(const auto& metric : currentBatch)
+		for(const auto& metric: currentBatch)
 		{
 			std::string metricValue = "";
-			std::visit(overloaded {
-					[&metricValue](int arg) { metricValue = std::to_string(arg); },
-					[&metricValue](float arg) { metricValue = std::to_string(arg); },
-					}, metric.second());
+			std::visit(overloaded{
+						   [&metricValue](int arg) {
+							   metricValue = std::to_string(arg);
+						   },
+						   [&metricValue](float arg) {
+							   metricValue = std::to_string(arg);
+						   },
+					   },
+				metric.second());
 			values.push_back(metric.first + "=" + metricValue);
 		}
 
@@ -204,24 +223,22 @@ private:
 
 	EventLoop::EventLoop& mEventLoop;
 	EventLoop::EventLoop::Timer mTimer;
-	std::chrono::seconds mBatchInterval;
+	Common::MONOTONIC_TIME mBatchInterval;
 	bool mTimerSet = false;
 
 	Common::UDPSocket mSocket;
 	std::string mServerAddress;
 	std::uint16_t mServerPort;
 
-	//FIXME
-	//Current implementation doesn't provide ordering for metrics written in line messages.
-	//Is this undesireable? No clue
-	std::unordered_map<std::string,
-			std::unordered_map<
-				std::string, std::function<
-					std::variant<int,float>()>>> mBatchMeasurements;
+	// FIXME
+	// Current implementation doesn't provide ordering for metrics written in line messages.
+	// Is this even a thing that we want/require? No clue.
+	std::unordered_map<std::string, std::unordered_map<std::string, std::function<std::variant<int, float>()>>>
+		mBatchMeasurements;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };
 
-}
+} // namespace StatWriter
 
 #endif // STATWRITER_H

@@ -1,6 +1,7 @@
 add_compile_options(-std=c++17 -Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wunused -Wpedantic)
 set(testSources
   main.cpp
+  Common.cpp
   tcp.cpp
   websocket.cpp
   )

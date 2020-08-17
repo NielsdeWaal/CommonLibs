@@ -1,5 +1,6 @@
 #include "EventLoop.h"
 
+#include "TSC.h"
 #include "Util.h"
 
 namespace EventLoop {
@@ -172,7 +173,8 @@ int EventLoop::Run()
 		for(const auto& timer: mTimers)
 		{
 			PROFILING_ZONE_NAMED("Timers");
-			if(timer->CheckTimerExpired())
+			const Common::MONOTONIC_TIME now = Common::MONOTONIC_CLOCK::Now();
+			if(timer->CheckTimerExpired(now))
 			{
 				timer->mCallback();
 				// mLogger->info("Timer has expired after {}", std::chrono::seconds(timer.mDuration).count());
@@ -268,7 +270,7 @@ bool EventLoop::IsRegistered(const int fd)
 
 void EventLoop::EnableStatistics() noexcept
 {
-	mStatsTimer = Timer(static_cast<std::chrono::seconds>(mStatTimerInterval), TimerType::Repeating, [this]() {
+	mStatsTimer = Timer(Common::MONOTONIC_CLOCK::ToCycles(mStatTimerInterval), TimerType::Repeating, [this]() {
 		PrintStatistics();
 	});
 	AddTimer(&mStatsTimer);
@@ -326,7 +328,8 @@ void EventLoop::LoadConfig(const std::string& configFile) noexcept
 
 void EventLoop::SheduleForNextCycle(const std::function<void()> func) noexcept
 {
-	mShortTimers.push_back(Timer(0s, TimerType::Oneshot, func));
+	using namespace Common::literals;
+	mShortTimers.push_back(Timer(0_s, TimerType::Oneshot, func));
 	AddTimer(&mShortTimers.back());
 }
 
