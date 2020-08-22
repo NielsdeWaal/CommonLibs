@@ -2,6 +2,7 @@
 #define EVENTLOOP_H
 
 #include <chrono>
+#include <functional>
 #include <unordered_map>
 #include <variant>
 #include <vector>
@@ -13,12 +14,12 @@
 #include <sys/types.h>
 
 // #include <spdlog/fmt/bin_to_hex.h>
+#include <cpptoml.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
-#include <cpptoml.h>
-
 #include "NonCopyable.h"
+#include "TSC.h"
 
 namespace EventLoop {
 
@@ -88,69 +89,37 @@ public:
 	// timescales
 	struct Timer
 	{
-		using TimePoint = std::chrono::high_resolution_clock::time_point;
-		using Clock = std::chrono::high_resolution_clock;
-		using seconds = std::chrono::seconds;
-		using milliseconds = std::chrono::milliseconds;
-		using minutes = std::chrono::minutes;
-
-		Timer(seconds duration, TimerType type, std::function<void()> callback)
-			: mEnd(static_cast<TimePoint>(Clock::now()) + duration)
-			, mState(TimerState::Active)
-			, mDuration(duration)
-			, mType(type)
-			, mCallback(std::move(callback))
-		{}
-
-		Timer(milliseconds duration, TimerType type, std::function<void()> callback)
-			: mEnd(static_cast<TimePoint>(Clock::now()) + duration)
-			, mState(TimerState::Active)
-			, mDuration(duration)
-			, mType(type)
-			, mCallback(std::move(callback))
-		{}
-
-		Timer(minutes duration, TimerType type, std::function<void()> callback)
-			: mEnd(static_cast<TimePoint>(Clock::now()) + duration)
-			, mState(TimerState::Active)
-			, mDuration(duration)
-			, mType(type)
-			, mCallback(std::move(callback))
-		{}
-
 		Timer() = default;
 
-		bool CheckTimerExpired() const noexcept
+		Timer(Common::MONOTONIC_TIME deadline, TimerType type, std::function<void()> callback)
+			: mEnd(Common::MONOTONIC_CLOCK::Now() + deadline)
+			, mType(type)
+			, mState(TimerState::Active)
+			, mCallback(std::move(callback))
+			, mDuration(deadline)
+		{}
+
+		[[nodiscard]] bool CheckTimerExpired() const noexcept
 		{
-			return (static_cast<TimePoint>(Clock::now()) > mEnd) ? true : false;
+			return Common::MONOTONIC_CLOCK::Now() > mEnd;
+		}
+
+		[[nodiscard]] bool CheckTimerExpired(Common::MONOTONIC_TIME now) const noexcept
+		{
+			return now > mEnd;
 		}
 
 		void UpdateDeadline() noexcept
 		{
-			std::visit(overloaded{
-						   [this](seconds arg) {
-							   mEnd = static_cast<TimePoint>(Clock::now()) + arg;
-						   },
-						   [this](milliseconds arg) {
-							   mEnd = static_cast<TimePoint>(Clock::now()) + arg;
-						   },
-						   [this](minutes arg) {
-							   mEnd = static_cast<TimePoint>(Clock::now()) + arg;
-						   },
-					   },
-				mDuration);
+			mEnd = Common::MONOTONIC_CLOCK::Now() + mDuration;
 		}
 
-		bool operator==(const Timer& rhs) const noexcept
-		{
-			return mEnd == rhs.mEnd;
-		}
-
-		TimePoint mEnd;
-		TimerState mState;
-		std::variant<milliseconds, seconds, minutes> mDuration;
+		// private:
+		Common::MONOTONIC_TIME mEnd;
 		TimerType mType;
+		TimerState mState;
 		std::function<void()> mCallback;
+		Common::MONOTONIC_TIME mDuration;
 	};
 
 	// TODO Add RemoveTimer function
@@ -173,12 +142,12 @@ public:
 
 	void EnableStatistics() noexcept;
 
-	void SheduleForNextCycle(const std::function<void()> func) noexcept;
+	void SheduleForNextCycle(std::function<void()> func) noexcept;
 
 	void LoadConfig(const std::string& configFile) noexcept;
 
 	std::shared_ptr<spdlog::logger> RegisterLogger(const std::string& module) const noexcept;
-	std::shared_ptr<cpptoml::table> GetConfigTable(const std::string& module) const noexcept;
+	std::shared_ptr<cpptoml::table> GetConfigTable(const std::string& module) const;
 
 private:
 	void PrintStatistics() noexcept;
@@ -205,7 +174,7 @@ private:
 	const int mEpollFd = 0;
 	int mEpollReturn = 0;
 	struct epoll_event mEpollEvents[MaxEpollEvents];
-	std::unordered_map<int, IFiledescriptorCallbackHandler*> mFdHandlers;
+	std::vector<IFiledescriptorCallbackHandler*> mFdHandlers;
 	int mEpollTimeout = 0;
 	// void CleanupTimers();
 	// Single timer class with enum state dictating if timer is repeating or not

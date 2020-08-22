@@ -1,5 +1,6 @@
 #include "EventLoop.h"
 
+#include "TSC.h"
 #include "Util.h"
 
 namespace EventLoop {
@@ -17,6 +18,9 @@ EventLoop::EventLoop()
 	}
 
 	SetupSignalWatcher();
+
+	mFdHandlers.reserve(512);
+	std::fill(mFdHandlers.begin(), mFdHandlers.end(), nullptr);
 }
 
 void EventLoop::Configure()
@@ -50,7 +54,7 @@ int EventLoop::Run()
 	PROFILING_ZONE_NAMED("Run function");
 	mStatsTime = std::chrono::high_resolution_clock::now();
 	mLogger->info("Eventloop has started");
-	while (true)
+	while(true)
 	{
 		PROFILING_ZONE_NAMED("Main run loop");
 		mEpollReturn = ::epoll_wait(mEpollFd, mEpollEvents, MaxEpollEvents, mEpollTimeout);
@@ -71,7 +75,10 @@ int EventLoop::Run()
 					!(mEpollEvents[event].events & EPOLLIN) ||
 					!(mEpollEvents[event].events & EPOLLOUT))*/ // error
 				{
-					mLogger->error("epoll event error, fd:{}, event:{}, errno:{}", mEpollEvents[event].data.fd, mEpollEvents[event].events, errno);
+					mLogger->error("epoll event error, fd:{}, event:{}, errno:{}",
+						mEpollEvents[event].data.fd,
+						mEpollEvents[event].events,
+						errno);
 					close(mEpollEvents[event].data.fd);
 				}
 				else if(mEpollEvents[event].events & EPOLLIN)
@@ -98,25 +105,28 @@ int EventLoop::Run()
 					}
 					else
 					{
+						PROFILING_ZONE_NAMED("Calling OnFiledescriptorRead handler");
 						mFdHandlers[mEpollEvents[event].data.fd]->OnFiledescriptorRead(mEpollEvents[event].data.fd);
 					}
 				}
 				else if(mEpollEvents[event].events & EPOLLOUT)
 				{
+					PROFILING_ZONE_NAMED("Calling OnFiledescriptorWrite handler");
 					mFdHandlers[mEpollEvents[event].data.fd]->OnFiledescriptorWrite(mEpollEvents[event].data.fd);
 				}
-				//else if(mEpollEvents[event].events & EPOLLHUP)
+				// else if(mEpollEvents[event].events & EPOLLHUP)
 				//{
 				//	mFdHandlers[mEpollEvents[event].data.fd]->OnFiledescriptorWrite(mEpollEvents[event].data.fd);
 				//}
 				else
 				{
-					mLogger->warn("Unhandled event:{} on fd:{}", mEpollEvents[event].data.fd, mEpollEvents[event].events);
+					mLogger->warn(
+						"Unhandled event:{} on fd:{}", mEpollEvents[event].data.fd, mEpollEvents[event].events);
 				}
 			}
 		}
 
-		for(const auto& [callback, latencyClass] : mCallbacks)
+		for(const auto& [callback, latencyClass]: mCallbacks)
 		{
 			PROFILING_ZONE_NAMED("Callbacks");
 			/**
@@ -160,13 +170,14 @@ int EventLoop::Run()
 		}
 
 		// TODO cache current time value, no need to retrieve it at every cycle
-		for(const auto& timer : mTimers)
+		for(const auto& timer: mTimers)
 		{
 			PROFILING_ZONE_NAMED("Timers");
-			if(timer->CheckTimerExpired())
+			const Common::MONOTONIC_TIME now = Common::MONOTONIC_CLOCK::Now();
+			if(timer->CheckTimerExpired(now))
 			{
 				timer->mCallback();
-				//mLogger->info("Timer has expired after {}", std::chrono::seconds(timer.mDuration).count());
+				// mLogger->info("Timer has expired after {}", std::chrono::seconds(timer.mDuration).count());
 				if(timer->mType == TimerType::Oneshot)
 				{
 					mTimers.erase(std::remove(std::begin(mTimers), std::end(mTimers), timer), std::end(mTimers));
@@ -181,7 +192,6 @@ int EventLoop::Run()
 		mCycleCount++;
 		PROFILING_FRAME();
 	}
-
 }
 
 void EventLoop::AddTimer(Timer* timer)
@@ -191,7 +201,9 @@ void EventLoop::AddTimer(Timer* timer)
 
 void EventLoop::RemoveTimer(Timer* timer)
 {
-	auto it = std::find_if(mTimers.begin(), mTimers.end(), [&](Timer* t){return timer == t;});
+	auto it = std::find_if(mTimers.begin(), mTimers.end(), [&](Timer* t) {
+		return timer == t;
+	});
 	if(it != mTimers.end())
 	{
 		mTimers.erase(it);
@@ -205,62 +217,62 @@ void EventLoop::RegisterCallbackHandler(IEventLoopCallbackHandler* callback, Lat
 
 void EventLoop::RegisterFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler)
 {
-	struct epoll_event event{};
+	struct epoll_event event
+	{
+	};
 	event.data.fd = fd;
 	event.events = events;
-	if (epoll_ctl(mEpollFd, EPOLL_CTL_ADD, fd, &event) == -1)
+	if(epoll_ctl(mEpollFd, EPOLL_CTL_ADD, fd, &event) == -1)
 	{
 		mLogger->critical("Failed to add fd to epoll interface, errno:{}", errno);
 		throw std::runtime_error("Failed to add fd to epoll interface");
 	}
-	mFdHandlers.insert({fd, handler});
+	mFdHandlers[fd] = handler;
 	mLogger->info("Registered Fd: {}", fd);
 }
 
 void EventLoop::ModifyFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler)
 {
-	struct epoll_event event{};
+	struct epoll_event event
+	{
+	};
 	event.data.fd = fd;
 	event.events = events;
-	if (epoll_ctl(mEpollFd, EPOLL_CTL_MOD, fd, &event) == -1)
+	if(epoll_ctl(mEpollFd, EPOLL_CTL_MOD, fd, &event) == -1)
 	{
 		mLogger->critical("Failed to mod fd to epoll interface, errno:{}", errno);
 		throw std::runtime_error("Failed to mod fd to epoll interface");
 	}
-	mFdHandlers.insert({fd, handler});
+	mFdHandlers[fd] = handler;
 	mLogger->info("Modified Fd: {}", fd);
 }
 
 void EventLoop::UnregisterFiledescriptor(int fd)
 {
-	struct epoll_event event{};
+	struct epoll_event event
+	{
+	};
 	event.data.fd = fd;
 	event.events = 0;
-	if (epoll_ctl(mEpollFd, EPOLL_CTL_DEL, fd, &event) == -1)
+	if(epoll_ctl(mEpollFd, EPOLL_CTL_DEL, fd, &event) == -1)
 	{
 		mLogger->critical("Failed to del fd to epoll interface, errno:{}", errno);
 		throw std::runtime_error("Failed to del fd to epoll interface");
 	}
-
-	const auto lookup = mFdHandlers.find(fd);
-	mFdHandlers.erase(lookup);
 
 	mLogger->info("Unregistered Fd: {}", fd);
 }
 
 bool EventLoop::IsRegistered(const int fd)
 {
-	const auto lookup = mFdHandlers.find(fd);
-	if(lookup == mFdHandlers.end())
-	{
-		return false;
-	}
-	return true;
+	return mFdHandlers[fd] == nullptr;
 }
 
 void EventLoop::EnableStatistics() noexcept
 {
-	mStatsTimer = Timer(static_cast<std::chrono::seconds>(mStatTimerInterval), TimerType::Repeating, [this](){ PrintStatistics(); });
+	mStatsTimer = Timer(Common::MONOTONIC_CLOCK::ToCycles(mStatTimerInterval), TimerType::Repeating, [this]() {
+		PrintStatistics();
+	});
 	AddTimer(&mStatsTimer);
 	mStatistics = true;
 }
@@ -270,8 +282,8 @@ void EventLoop::PrintStatistics() noexcept
 	auto interval = std::chrono::high_resolution_clock::now() - mStatsTime;
 
 	mLogger->info("EventLoop statistics -> Cycles: {} Interval: {}ms",
-			mCycleCount,
-			std::chrono::duration_cast<std::chrono::milliseconds>(interval).count());
+		mCycleCount,
+		std::chrono::duration_cast<std::chrono::milliseconds>(interval).count());
 
 	mCycleCount = 0;
 	mStatsTime = std::chrono::high_resolution_clock::now();
@@ -283,13 +295,13 @@ void EventLoop::SetupSignalWatcher()
 	::sigaddset(&mSigMask, SIGINT);
 	::sigaddset(&mSigMask, SIGQUIT);
 
-	if(::sigprocmask(SIG_BLOCK, &mSigMask, NULL) == -1)
+	if(::sigprocmask(SIG_BLOCK, &mSigMask, nullptr) == -1)
 	{
 		mLogger->critical("Failed to block other signal handlers, errno:{}", errno);
 		throw std::runtime_error("Failed to block other signal handlers");
 	}
 
-	mSignalFd = ::signalfd(-1, &mSigMask, SFD_NONBLOCK|SFD_CLOEXEC);
+	mSignalFd = ::signalfd(-1, &mSigMask, SFD_NONBLOCK | SFD_CLOEXEC);
 
 	if(mSignalFd == -1)
 	{
@@ -297,7 +309,9 @@ void EventLoop::SetupSignalWatcher()
 		throw std::runtime_error("Failed to create signal watcher");
 	}
 
-	struct epoll_event event{};
+	struct epoll_event event
+	{
+	};
 	event.data.fd = mSignalFd;
 	event.events = EPOLLIN;
 	if(::epoll_ctl(mEpollFd, EPOLL_CTL_ADD, mSignalFd, &event) == -1)
@@ -305,7 +319,6 @@ void EventLoop::SetupSignalWatcher()
 		mLogger->critical("Failed to add signalFd to epoll interface, errno:{}", errno);
 		throw std::runtime_error("Failed to add signalFd to epoll interface");
 	}
-
 }
 
 void EventLoop::LoadConfig(const std::string& configFile) noexcept
@@ -313,9 +326,10 @@ void EventLoop::LoadConfig(const std::string& configFile) noexcept
 	mConfig = cpptoml::parse_file(configFile);
 }
 
-void EventLoop::SheduleForNextCycle(const std::function<void()> func) noexcept
+void EventLoop::SheduleForNextCycle(std::function<void()> func) noexcept
 {
-	mShortTimers.push_back(Timer(0s, TimerType::Oneshot, func));
+	using namespace Common::literals;
+	mShortTimers.emplace_back(0_s, TimerType::Oneshot, std::move(func));
 	AddTimer(&mShortTimers.back());
 }
 
@@ -331,7 +345,7 @@ std::shared_ptr<spdlog::logger> EventLoop::RegisterLogger(const std::string& mod
 	return logger;
 }
 
-std::shared_ptr<cpptoml::table> EventLoop::GetConfigTable(const std::string& module) const noexcept
+std::shared_ptr<cpptoml::table> EventLoop::GetConfigTable(const std::string& module) const
 {
 	const auto table = mConfig->get_table(module);
 
@@ -344,4 +358,4 @@ std::shared_ptr<cpptoml::table> EventLoop::GetConfigTable(const std::string& mod
 	return table;
 }
 
-}
+} // namespace EventLoop

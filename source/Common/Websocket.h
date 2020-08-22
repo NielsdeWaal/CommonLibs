@@ -355,7 +355,7 @@ public:
 	struct Message
 	{
 	public:
-		explicit Message(Opcode op, std::size_t size = 128)
+		explicit Message(Opcode op, [[maybe_unused]] std::size_t size = 128)
 			: mOpcode(op)
 			, mPrepared(false)
 			, mFin(false)
@@ -807,6 +807,7 @@ public:
 		const char* startPointer = data;
 		const char* endPointer = startPointer + len;
 
+		// FIXME Should be fixed with proper encoding support in WebsocketDecoder
 		header[0] = 0x80 | static_cast<int>(Opcode::TEXT);
 
 		header[1] = (len & 0xff) | (0x80);
@@ -858,7 +859,7 @@ private:
 		mLogger->warn("Websocket testing server disconnected");
 	}
 
-	void OnIncomingData(SocketType* conn, char* data, size_t len)
+	void OnIncomingData([[maybe_unused]] SocketType* conn, char* data, size_t len)
 	{
 		// TODO Needs actual HTTP request handling instead of just looking at the first character
 		if(data[0] == 'H' && !mConnected)
@@ -886,6 +887,7 @@ private:
 			case Websocket::WebsocketDecoder::Opcode::PING: {
 				SendControlMessage(Opcode::PONG, msg->GetPayload().data(), msg->GetPayload().size());
 				mLogger->info("Sending PONG");
+				return;
 			}
 			case Websocket::WebsocketDecoder::Opcode::PONG: {
 				mLogger->info("Received PONG");
@@ -895,6 +897,17 @@ private:
 					mLogger->error("PONG message returned wrong message, continuing for now");
 				}
 				mAwaitingPong = false;
+				return;
+			}
+			case Websocket::WebsocketDecoder::Opcode::CLOSE: {
+				mLogger->warn("Received close");
+				mHandler->OnDisconnect(this);
+				mConnected = false;
+				return;
+			}
+			case Websocket::WebsocketDecoder::Opcode::CONTINUATION: {
+				mLogger->error("Unhandled opcode");
+				return;
 			}
 			}
 		}

@@ -1,9 +1,10 @@
-set(CommonHeaders StreamSocket.h TLSSocket.h UDPSocket.h Util.h Websocket.h)
+set(CommonHeaders StreamSocket.h TLSSocket.h UDPSocket.h Util.h Websocket.h TSC.h)
+set(CommonSources TSC.cpp)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 
-add_library(Common INTERFACE ${CommonLibsHeaders})
-target_link_libraries(Common INTERFACE 
+add_library(Common STATIC ${CommonHeaders} ${CommonSources})
+target_link_libraries(Common PRIVATE
 	EventLoop
 	spdlog
 	cpptoml
