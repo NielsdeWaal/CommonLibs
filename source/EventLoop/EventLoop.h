@@ -142,12 +142,12 @@ public:
 
 	void EnableStatistics() noexcept;
 
-	void SheduleForNextCycle(const std::function<void()> func) noexcept;
+	void SheduleForNextCycle(std::function<void()> func) noexcept;
 
 	void LoadConfig(const std::string& configFile) noexcept;
 
 	std::shared_ptr<spdlog::logger> RegisterLogger(const std::string& module) const noexcept;
-	std::shared_ptr<cpptoml::table> GetConfigTable(const std::string& module) const noexcept;
+	std::shared_ptr<cpptoml::table> GetConfigTable(const std::string& module) const;
 
 private:
 	void PrintStatistics() noexcept;

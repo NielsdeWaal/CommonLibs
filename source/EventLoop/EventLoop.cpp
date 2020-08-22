@@ -295,7 +295,7 @@ void EventLoop::SetupSignalWatcher()
 	::sigaddset(&mSigMask, SIGINT);
 	::sigaddset(&mSigMask, SIGQUIT);
 
-	if(::sigprocmask(SIG_BLOCK, &mSigMask, NULL) == -1)
+	if(::sigprocmask(SIG_BLOCK, &mSigMask, nullptr) == -1)
 	{
 		mLogger->critical("Failed to block other signal handlers, errno:{}", errno);
 		throw std::runtime_error("Failed to block other signal handlers");
@@ -326,10 +326,10 @@ void EventLoop::LoadConfig(const std::string& configFile) noexcept
 	mConfig = cpptoml::parse_file(configFile);
 }
 
-void EventLoop::SheduleForNextCycle(const std::function<void()> func) noexcept
+void EventLoop::SheduleForNextCycle(std::function<void()> func) noexcept
 {
 	using namespace Common::literals;
-	mShortTimers.push_back(Timer(0_s, TimerType::Oneshot, func));
+	mShortTimers.emplace_back(0_s, TimerType::Oneshot, std::move(func));
 	AddTimer(&mShortTimers.back());
 }
 
@@ -345,7 +345,7 @@ std::shared_ptr<spdlog::logger> EventLoop::RegisterLogger(const std::string& mod
 	return logger;
 }
 
-std::shared_ptr<cpptoml::table> EventLoop::GetConfigTable(const std::string& module) const noexcept
+std::shared_ptr<cpptoml::table> EventLoop::GetConfigTable(const std::string& module) const
 {
 	const auto table = mConfig->get_table(module);
 

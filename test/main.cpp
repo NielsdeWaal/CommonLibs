@@ -40,7 +40,6 @@ TEST_CASE("EventLoop Timer timing", "[EventLoop Timer]")
 	EventLoop::EventLoop loop;
 	loop.LoadConfig("Example.toml");
 	loop.Configure();
-	using TimePoint = std::chrono::high_resolution_clock::time_point;
 
 	auto timeStart = std::chrono::high_resolution_clock::now();
 	auto timeEnd = std::chrono::high_resolution_clock::now();

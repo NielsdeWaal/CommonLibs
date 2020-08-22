@@ -1,6 +1,7 @@
 #include <catch2/catch.hpp>
 
 #include <arpa/inet.h>
+#include <cstdint>
 #include <netinet/in.h>
 #include <sys/socket.h>
 
@@ -143,7 +144,7 @@ TEST_CASE("TCP PeerId", "[Eventloop TCP]")
 
 		void OnConnected() final
 		{
-			const int addr = mSocket.GetPeerAddress();
+			const std::uint32_t addr = mSocket.GetPeerAddress();
 			const std::uint16_t port = mSocket.GetPeerPort();
 			REQUIRE(addr == ::inet_addr(mHostname.data()));
 			REQUIRE(port == mLocalport);

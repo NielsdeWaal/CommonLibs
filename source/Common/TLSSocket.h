@@ -1,6 +1,8 @@
 #ifndef TLS_SOCKET_H
 #define TLS_SOCKET_H
 
+#include <string>
+
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -94,7 +96,7 @@ public:
 		}
 	}
 
-	void ConnectHostname(const std::string& url, const uint16_t port) noexcept
+	void ConnectHostname(const std::string& url, const uint16_t port)
 	{
 		struct addrinfo hints;
 		struct addrinfo* infoptr;
