@@ -1,6 +1,7 @@
 set(CommonHeaders StreamSocket.h TLSSocket.h UDPSocket.h Util.h Websocket.h TSC.h)
 set(CommonSources TSC.cpp)
 find_package(Threads REQUIRED)
+include(FindOpenSSL)
 find_package(OpenSSL REQUIRED)
 
 add_library(Common STATIC ${CommonHeaders} ${CommonSources})

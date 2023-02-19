@@ -1,11 +1,14 @@
 #include "EventLoop.h"
 
 #include "TSC.h"
+#include "UringCommands.h"
 #include "Util.h"
+#include <fcntl.h>
+#include <liburing.h>
+#include <liburing/io_uring.h>
+#include <memory>
 
 namespace EventLoop {
-
-#include <linux/io_uring.h>
 
 EventLoop::EventLoop()
 	: mStarted(true)
@@ -19,7 +22,9 @@ EventLoop::EventLoop()
 		throw std::runtime_error("Failed to seetup epoll interface");
 	}
 
-	// io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, IORING_SETUP_IOPOLL);
+	// int ret = io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, IORING_SETUP_IOPOLL);
+	// int uringFlags = IORING_SETUP_IOPOLL;
+	// int ret = io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, uringFlags);
 	int ret = io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, 0);
 	if(ret < 0)
 	{
@@ -33,8 +38,13 @@ EventLoop::EventLoop()
 
 	SetupSignalWatcher();
 
-	mFdHandlers.reserve(512);
+	mFdHandlers.reserve(FdHandlerReserve);
 	std::fill(mFdHandlers.begin(), mFdHandlers.end(), nullptr);
+}
+
+EventLoop::~EventLoop()
+{
+	io_uring_queue_exit(&mIoUring);
 }
 
 void EventLoop::Configure()
@@ -55,12 +65,17 @@ void EventLoop::Configure()
 	mRunHot = config->get_as<bool>("RunHot").value_or(false);
 	if(!mRunHot)
 	{
-		mEpollTimeout = 10;
+		mEpollTimeout = NonRunHotEpollTimeout;
 	}
 	else
 	{
 		mEpollTimeout = 0;
 	}
+}
+
+void EventLoop::Stop()
+{
+	mStopped = true;
 }
 
 int EventLoop::Run()
@@ -71,72 +86,70 @@ int EventLoop::Run()
 	while(true)
 	{
 		PROFILING_ZONE_NAMED("Main run loop");
-		mEpollReturn = ::epoll_wait(mEpollFd, mEpollEvents, MaxEpollEvents, mEpollTimeout);
+		mEpollReturn = ::epoll_wait(mEpollFd, mEpollEvents.data(), MaxEpollEvents, mEpollTimeout);
 		mLogger->trace("epoll_wait returned: {}", mEpollReturn);
 		if(mEpollReturn < 0)
 		{
 			mLogger->critical("Error on epoll");
 			throw std::runtime_error("Error on epoll");
 		}
-		else
+
+		PROFILING_ZONE_NAMED("Handling events on epoll");
+		mLogger->trace("{} events on fd's", mEpollReturn);
+		for(int event = 0; event < mEpollReturn; ++event)
 		{
-			PROFILING_ZONE_NAMED("Handling events on epoll");
-			mLogger->trace("{} events on fd's", mEpollReturn);
-			for(int event = 0; event < mEpollReturn; ++event)
-			{
-				if (mEpollEvents[event].events & EPOLLERR ||
+			if (mEpollEvents[event].events & EPOLLERR ||
 					mEpollEvents[event].events & EPOLLHUP) /*||
 					!(mEpollEvents[event].events & EPOLLIN) ||
 					!(mEpollEvents[event].events & EPOLLOUT))*/ // error
+			{
+				const int& fd = mEpollEvents[event].data.fd;
+				const uint32_t& events = mEpollEvents[event].events;
+				mLogger->error("epoll event error, fd:{}, event:{}, errno:{}", fd, events, errno);
+				::close(mEpollEvents[event].data.fd);
+			}
+			else if(mEpollEvents[event].events & EPOLLIN)
+			{
+				if(mEpollEvents[event].data.fd == mSignalFd)
 				{
-					mLogger->error("epoll event error, fd:{}, event:{}, errno:{}",
-						mEpollEvents[event].data.fd,
-						mEpollEvents[event].events,
-						errno);
-					::close(mEpollEvents[event].data.fd);
-				}
-				else if(mEpollEvents[event].events & EPOLLIN)
-				{
-					if(mEpollEvents[event].data.fd == mSignalFd)
+					const size_t s = ::read(mSignalFd, &mFDSI, sizeof(struct signalfd_siginfo));
+					if(s != sizeof(struct signalfd_siginfo))
 					{
-						const size_t s = ::read(mSignalFd, &mFDSI, sizeof(struct signalfd_siginfo));
-						if(s != sizeof(struct signalfd_siginfo))
-						{
-							mLogger->critical("Error reading signal fd:{}, errno:{}", mSignalFd, errno);
-							throw std::runtime_error("Error reading signalfd");
-						}
+						mLogger->critical("Error reading signal fd:{}, errno:{}", mSignalFd, errno);
+						throw std::runtime_error("Error reading signalfd");
+					}
 
-						if(mFDSI.ssi_signo == SIGINT)
-						{
-							mLogger->info("Got SIGINT, shutting down application");
-							return 0;
-						}
-						else if(mFDSI.ssi_signo == SIGQUIT)
-						{
-							mLogger->info("Got SIGQUIT, shutting down application");
-							return 0;
-						}
-					}
-					else
+					if(mFDSI.ssi_signo == SIGINT)
 					{
-						PROFILING_ZONE_NAMED("Calling OnFiledescriptorRead handler");
-						mFdHandlers[mEpollEvents[event].data.fd]->OnFiledescriptorRead(mEpollEvents[event].data.fd);
+						mLogger->info("Got SIGINT, shutting down application");
+						return 0;
+					}
+					else if(mFDSI.ssi_signo == SIGQUIT)
+					{
+						mLogger->info("Got SIGQUIT, shutting down application");
+						return 0;
 					}
 				}
-				else if(mEpollEvents[event].events & EPOLLOUT)
-				{
-					PROFILING_ZONE_NAMED("Calling OnFiledescriptorWrite handler");
-					mFdHandlers[mEpollEvents[event].data.fd]->OnFiledescriptorWrite(mEpollEvents[event].data.fd);
-				}
-				// else if(mEpollEvents[event].events & EPOLLHUP)
-				//{
-				//	mFdHandlers[mEpollEvents[event].data.fd]->OnFiledescriptorWrite(mEpollEvents[event].data.fd);
-				//}
 				else
 				{
-					mLogger->warn(
-						"Unhandled event:{} on fd:{}", mEpollEvents[event].data.fd, mEpollEvents[event].events);
+					PROFILING_ZONE_NAMED("Calling OnFiledescriptorRead handler");
+					mFdHandlers[mEpollEvents[event].data.fd]->OnFiledescriptorRead(mEpollEvents[event].data.fd);
 				}
+			}
+			else if(mEpollEvents[event].events & EPOLLOUT)
+			{
+				PROFILING_ZONE_NAMED("Calling OnFiledescriptorWrite handler");
+				mFdHandlers[mEpollEvents[event].data.fd]->OnFiledescriptorWrite(mEpollEvents[event].data.fd);
+			}
+			// else if(mEpollEvents[event].events & EPOLLHUP)
+			//{
+			//	mFdHandlers[mEpollEvents[event].data.fd]->OnFiledescriptorWrite(mEpollEvents[event].data.fd);
+			//}
+			else
+			{
+				const int& fd = mEpollEvents[event].data.fd;
+				const uint32_t& events = mEpollEvents[event].events;
+				mLogger->warn("Unhandled event:{} on fd:{}", fd, events);
 			}
 		}
 
@@ -144,28 +157,49 @@ int EventLoop::Run()
 		 * @brief io_uring section
 		 *
 		 * Section for handling io_uring polling
+		 *
+		 * TODO Should probably move to something like a `peek` function
 		 */
-		io_uring_cqe* cqe;
+		::io_uring_cqe* cqe = nullptr;
 		const int peekRet = io_uring_peek_cqe(&mIoUring, &cqe);
-		if(!cqe)
+		if(peekRet == 0)
 		{
-			mLogger->trace("No completion event");
-		}
-		else
-		{
-			io_uring_cqe_seen(&mIoUring, cqe);
-
+			mLogger->info("Got uring completion event, res: {}", cqe->res);
 			if(cqe->res < 0)
 			{
-				mLogger->warn("Negative res on cqe: {}", cqe->res);
+				mLogger->critical("Got error on completion event: {}", cqe->res);
 			}
 			else
 			{
-				// mLogger->info("cqe result: {}", cqe->res);
-				ConnInfo* data = static_cast<ConnInfo*>(io_uring_cqe_get_data(cqe));
-				mLogger->info("conninfo type: {}", data->mType);
+				auto* data = reinterpret_cast<UserData*>(cqe->user_data);
+				if(data != nullptr)
+				{
+					data->mCallback->OnCompletion(*cqe, data);
+				}
+				else
+				{
+					mLogger->critical("received nullptr user_data on completion");
+				}
 			}
+			io_uring_cqe_seen(&mIoUring, cqe);
 		}
+		// if(peekRet != 0)
+		// {
+		// unsigned completed = 0;
+
+		// unsigned head = 0;
+		// ::io_uring_cqe* cqe = nullptr;
+		// io_uring_for_each_cqe(&mIoUring, head, cqe)
+		// {
+		// 	completed++;
+		// 	mLogger->info("Received cqe");
+		// 	if(cqe->res < 0)
+		// 	{
+		// 		mLogger->error("Error in completion event: {}", cqe->res);
+		// 	}
+		// }
+		// io_uring_cq_advance(&mIoUring, completed);
+		// }
 
 		/**
 		 * TODO There seems to be some room for improvement here.
@@ -235,10 +269,18 @@ int EventLoop::Run()
 			}
 		}
 
+		if(mStopped)
+		{
+			return 0;
+		}
+
 		mCycleCount++;
 		PROFILING_FRAME();
 	}
 }
+
+void EventLoop::RegisterFile(int fd)
+{}
 
 void EventLoop::AddTimer(Timer* timer)
 {
@@ -263,22 +305,21 @@ void EventLoop::RegisterCallbackHandler(IEventLoopCallbackHandler* callback, Lat
 
 void EventLoop::RegisterFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler)
 {
-	// struct epoll_event event{};
-	// event.data.fd = fd;
-	// event.events = events;
-	// if (epoll_ctl(mEpollFd, EPOLL_CTL_ADD, fd, &event) == -1)
-	// {
-	// mLogger->critical("Failed to add fd to epoll interface, errno:{}", errno);
-	// throw std::runtime_error("Failed to add fd to epoll interface");
-	// }
+	::epoll_event event{};
+	event.data.fd = fd;
+	event.events = events;
+	if(epoll_ctl(mEpollFd, EPOLL_CTL_ADD, fd, &event) == -1)
+	{
+		mLogger->critical("Failed to add fd to epoll interface, errno:{}", errno);
+		throw std::runtime_error("Failed to add fd to epoll interface");
+	}
 	// mFdHandlers.insert({fd, handler});
 	// mLogger->info("Registered Fd: {}", fd);
 
-	io_uring_sqe* sqe = io_uring_get_sqe(&mIoUring);
-	io_uring_prep_poll_add(sqe, fd, events);
+	// io_uring_sqe* sqe = io_uring_get_sqe(&mIoUring);
+	// io_uring_prep_poll_add(sqe, fd, events);
 
-	io_uring_submit(&mIoUring);
-	mFdHandlers.insert({fd, handler});
+	// io_uring_submit(&mIoUring);
 
 	mFdHandlers[fd] = handler;
 	mLogger->info("Registered Fd: {}", fd);
@@ -286,9 +327,7 @@ void EventLoop::RegisterFiledescriptor(int fd, uint32_t events, IFiledescriptorC
 
 void EventLoop::ModifyFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler)
 {
-	struct epoll_event event
-	{
-	};
+	::epoll_event event{};
 	event.data.fd = fd;
 	event.events = events;
 	if(epoll_ctl(mEpollFd, EPOLL_CTL_MOD, fd, &event) == -1)
@@ -386,6 +425,70 @@ void EventLoop::SheduleForNextCycle(std::function<void()> func) noexcept
 	AddTimer(&mShortTimers.back());
 }
 
+void EventLoop::QueueStandardRequest(std::unique_ptr<UserData> userData)
+{
+	mLogger->info("Queueing standard request");
+	// std::unique_ptr<SubmissionQueueEvent> evt = std::make_unique<SubmissionQueueEvent>(io_uring_get_sqe(&mIoUring));
+	SubmissionQueueEvent* evt = io_uring_get_sqe(&mIoUring);
+	if(evt == nullptr)
+	{
+		mLogger->critical("Unable to get new sqe from io_uring");
+		return;
+	}
+
+	UserData* data = userData.release();
+
+	FillSQE(evt, data->mType, data);
+
+	io_uring_sqe_set_data(evt, data);
+
+	int ret = io_uring_submit(&mIoUring);
+	if(ret < 0)
+	{
+		mLogger->critical("Unable to submit request to io_uring");
+	}
+}
+
+void EventLoop::FillSQE(SubmissionQueueEvent* sqe, const SourceType& data, const UserData* userData)
+{
+	switch(data)
+	{
+	case SourceType::Nop: {
+		mLogger->info("Prepping nop request");
+		io_uring_prep_nop(sqe);
+		break;
+	}
+	case SourceType::Open: {
+		mLogger->info("Prepping open request");
+		const auto& openData = std::get<OPEN>(userData->mInfo);
+		io_uring_prep_openat(sqe, AT_FDCWD, openData.filename->c_str(), openData.flags, openData.mode);
+		break;
+	}
+	case SourceType::Close: {
+		mLogger->info("Prepping close request");
+		const auto& openData = std::get<CLOSE>(userData->mInfo);
+		io_uring_prep_close(sqe, openData.fd);
+		break;
+	}
+	case SourceType::Read: {
+		mLogger->info("Prepping read request");
+		const auto& openData = std::get<READ>(userData->mInfo);
+		io_uring_prep_read(sqe, openData.fd, openData.buf, openData.len, openData.pos);
+		break;
+	}
+	case SourceType::Write: {
+		mLogger->info("Prepping write request");
+		const auto& openData = std::get<WRITE>(userData->mInfo);
+		io_uring_prep_write(sqe, openData.fd, openData.buf, openData.len, openData.pos);
+		break;
+	}
+	default: {
+		throw std::runtime_error("Unhandled SourceType");
+		break;
+	}
+	}
+}
+
 std::shared_ptr<spdlog::logger> EventLoop::RegisterLogger(const std::string& module) const noexcept
 {
 	std::shared_ptr<spdlog::logger> logger = spdlog::get(module);
@@ -400,7 +503,7 @@ std::shared_ptr<spdlog::logger> EventLoop::RegisterLogger(const std::string& mod
 
 std::shared_ptr<cpptoml::table> EventLoop::GetConfigTable(const std::string& module) const
 {
-	const auto table = mConfig->get_table(module);
+	auto table = mConfig->get_table(module);
 
 	if(!table)
 	{

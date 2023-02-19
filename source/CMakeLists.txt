@@ -1,8 +1,8 @@
-add_compile_options(-std=c++17 -Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wunused -Wpedantic)
+add_compile_options(-std=c++20 -Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wunused -Wpedantic)
 find_package(Threads REQUIRED) #threading
 find_package(OpenSSL REQUIRED)
 
-find_library(libUring REQUIRED) #liburing
+# find_library(libUring REQUIRED) #liburing
 
 add_subdirectory(Common)
 add_subdirectory(EventLoop)

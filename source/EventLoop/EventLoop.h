@@ -24,8 +24,11 @@
 
 #include "NonCopyable.h"
 #include "TSC.h"
+#include "UringCommands.h"
 
 namespace EventLoop {
+
+using namespace std::chrono_literals;
 
 template<class... Ts>
 struct overloaded : Ts...
@@ -34,7 +37,6 @@ struct overloaded : Ts...
 };
 template<class... Ts>
 overloaded(Ts...) -> overloaded<Ts...>;
-using namespace std::chrono_literals;
 
 /**
  * @brief virtual class for eventloop callback
@@ -48,8 +50,11 @@ class IEventLoopCallbackHandler
 {
 public:
 	virtual void OnEventLoopCallback() = 0;
-	virtual ~IEventLoopCallbackHandler()
-	{}
+	virtual ~IEventLoopCallbackHandler() = default;
+	// IEventLoopCallbackHandler(const IEventLoopCallbackHandler&) = delete;
+	// IEventLoopCallbackHandler(const IEventLoopCallbackHandler&&) = delete;
+	// IEventLoopCallbackHandler& operator=(const IEventLoopCallbackHandler&) = delete;
+	// IEventLoopCallbackHandler& operator=(const IEventLoopCallbackHandler&&) = delete;
 };
 
 /**
@@ -63,14 +68,25 @@ class IFiledescriptorCallbackHandler
 public:
 	virtual void OnFiledescriptorRead(int fd) = 0;
 	virtual void OnFiledescriptorWrite(int fd) = 0;
-	virtual ~IFiledescriptorCallbackHandler()
-	{}
+	virtual ~IFiledescriptorCallbackHandler() = default;
 };
 
+/**
+ * @brief The core eventloop for the commonlibs framework.
+ *
+ * This framework is build on the low latency requirements that certain projects need with options for more conservative
+ * scheduling. We use standard linux subsystems such as io_uring and epoll to achieve low latency IO.
+ *
+ * Future expansion:
+ * - Different io_uring rings (low latency/standard requests).
+ * - Deamonise the application.
+ * - Bind application to a single core.
+ */
 class EventLoop : Common::NonCopyable<EventLoop>
 {
 public:
 	EventLoop();
+	~EventLoop();
 
 	int Run();
 	void Stop();
@@ -138,11 +154,29 @@ public:
 
 	void Configure();
 
+	/// EPOLL related operations
 	void RegisterCallbackHandler(IEventLoopCallbackHandler* callback, LatencyType latency);
 	void RegisterFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler);
 	void ModifyFiledescriptor(int fd, uint32_t events, IFiledescriptorCallbackHandler* handler);
 	void UnregisterFiledescriptor(int fd);
 	bool IsRegistered(int fd);
+
+	/// io_uring related operations
+	// TODO maybe add openat call, this could also be used as a generic open file (openat(0))
+	void RegisterBuffers(const ::iovec* iovecs, std::size_t amount);
+	void RegisterFile(int fd);
+	void SubmitWritev();
+	void SubmitReadv();
+	void SubmitRead(std::uint64_t pos, void* buf, std::size_t len);
+	void SubmitWrite();
+
+	/**
+	 * @brief Queue a standard io_uring request to the ring
+	 *
+	 * This function will be expanded in the future where it can be used to differentiate between
+	 * direct IO and normal requests such as Send/Recv.
+	 */
+	void QueueStandardRequest(std::unique_ptr<UserData>);
 
 	void EnableStatistics() noexcept;
 
@@ -161,12 +195,20 @@ public:
 	};
 
 private:
+	/**
+	 * @brief Pass SubmissionQueueEvent and user data to be submitted to the ring
+	 *
+	 */
+	void FillSQE(SubmissionQueueEvent* sqe, const SourceType& data, const UserData* userData);
+
 	void PrintStatistics() noexcept;
 
 	void SetupSignalWatcher();
 
 	static constexpr int MaxEpollEvents = 64;
-	static constexpr int MaxIORingQueueEntries = 16;
+	static constexpr int MaxIORingQueueEntries = 64;
+	static constexpr int FdHandlerReserve = 512;
+	static constexpr int NonRunHotEpollTimeout = 10;
 
 	bool mStarted;
 	bool mStatistics;
@@ -185,7 +227,7 @@ private:
 
 	const int mEpollFd = 0;
 	int mEpollReturn = 0;
-	struct epoll_event mEpollEvents[MaxEpollEvents];
+	std::array<struct epoll_event, MaxEpollEvents> mEpollEvents;
 	std::vector<IFiledescriptorCallbackHandler*> mFdHandlers;
 	int mEpollTimeout = 0;
 	// void CleanupTimers();
@@ -198,6 +240,8 @@ private:
 	// int mTimerIterationCounter = 0;
 
 	io_uring mIoUring;
+
+	bool mStopped = false;
 
 	std::shared_ptr<cpptoml::table> mConfig;
 	std::shared_ptr<spdlog::logger> mLogger;

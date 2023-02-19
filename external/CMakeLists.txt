@@ -83,7 +83,7 @@ endmacro()
 # target_link_libraries (exampleApp PRIVATE catch)
 # #include <catch.hpp>
 ExternalHeaderOnly_Add(Catch
-    "https://github.com/catchorg/Catch2.git" "origin/master" "single_include/catch2")
+    "https://github.com/catchorg/Catch2.git" "devel" "single_include/catch2")
 
 #------------------------------------------------------------------------------
 # target_link_libraries (exampleApp PRIVATE json)
@@ -105,7 +105,7 @@ ExternalHeaderOnly_Add(spdlog
 #-----------------------------------------------------------------------------
 # TOML Lib
 ExternalHeaderOnly_Add(cpptoml
-    "https://github.com/skystrife/cpptoml.git" "origin/master" "include")
+    "https://github.com/skystrife/cpptoml.git" "master" "include")
 
 # Tracy
 # TODO Need to find a way to neatly switch to tags. Have to manually set tag
