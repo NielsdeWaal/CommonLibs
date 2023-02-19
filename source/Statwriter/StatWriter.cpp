@@ -11,9 +11,8 @@ void StatWriter::AddGroup(const std::string& label, const bool batch) noexcept
 	}
 }
 
-void StatWriter::AddFieldToGroup(const std::string& group,
-	const std::string& label,
-	const std::function<std::variant<int,float>()> getter) noexcept
+void StatWriter::AddFieldToGroup(const std::string& group, const std::string& label,
+	const std::function<std::variant<int, float>()>& getter) noexcept
 {
 	mBatchMeasurements[group][label] = getter;
 	mLogger->info("Added field: {} to group: {}", label, group);
@@ -22,7 +21,7 @@ void StatWriter::AddFieldToGroup(const std::string& group,
 void StatWriter::WriteBatch() noexcept
 {
 	mLogger->info("Writing batches to server");
-	for(const auto& batch : mBatchMeasurements)
+	for(const auto& batch: mBatchMeasurements)
 	{
 		InfluxDBLine line;
 
@@ -36,4 +35,4 @@ void StatWriter::WriteBatch() noexcept
 	}
 }
 
-}
+} // namespace StatWriter

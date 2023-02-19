@@ -20,7 +20,7 @@ TEST_CASE("EventLoop Timer callback", "[EventLoop Timer]")
 	EventLoop::EventLoop::Timer evTimer =
 		EventLoop::EventLoop::Timer(EventLoop::EventLoop::Timer(1_ms, EventLoop::EventLoop::TimerType::Oneshot, [&]() {
 			timerConfirmation = true;
-			std::raise(SIGINT);
+			loop.Stop();
 		}));
 	loop.AddTimer(&evTimer);
 
@@ -46,7 +46,7 @@ TEST_CASE("EventLoop Timer timing", "[EventLoop Timer]")
 	EventLoop::EventLoop::Timer evTimer =
 		EventLoop::EventLoop::Timer(100_ms, EventLoop::EventLoop::TimerType::Oneshot, [&]() {
 			timeEnd = std::chrono::high_resolution_clock::now();
-			std::raise(SIGINT);
+			loop.Stop();
 		});
 	loop.AddTimer(&evTimer);
 
@@ -69,13 +69,13 @@ TEST_CASE("EventLoop Timer removal", "[EventLoop Timer]")
 	EventLoop::EventLoop::Timer evTimer =
 		EventLoop::EventLoop::Timer(EventLoop::EventLoop::Timer(1_ms, EventLoop::EventLoop::TimerType::Oneshot, [&]() {
 			callCounter++;
-			std::raise(SIGINT);
+			loop.Stop();
 		}));
 
 	EventLoop::EventLoop::Timer AssertTimer =
 		EventLoop::EventLoop::Timer(EventLoop::EventLoop::Timer(2_ms, EventLoop::EventLoop::TimerType::Oneshot, [&]() {
 			REQUIRE(callCounter == 1);
-			std::raise(SIGINT);
+			loop.Stop();
 		}));
 	loop.AddTimer(&evTimer);
 
@@ -113,7 +113,7 @@ TEST_CASE("EventLoop callback", "[EventLoop callback]")
 	struct Test : public EventLoop::IEventLoopCallbackHandler
 	{
 	public:
-		Test(EventLoop::EventLoop& ev)
+		explicit Test(EventLoop::EventLoop& ev)
 			: mEv(ev)
 		{
 			mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
@@ -122,7 +122,7 @@ TEST_CASE("EventLoop callback", "[EventLoop callback]")
 		void OnEventLoopCallback() final
 		{
 			REQUIRE(true);
-			std::raise(SIGINT);
+			mEv.Stop();
 		}
 
 	private:

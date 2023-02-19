@@ -135,7 +135,7 @@ public:
 	 * This should be fixable with variants.
 	 */
 	void AddFieldToGroup(const std::string& group, const std::string& label,
-		const std::function<std::variant<int, float>()> getter) noexcept;
+		const std::function<std::variant<int, float>()>& getter) noexcept;
 
 	/**
 	 * @brief Sends state directly to TSDB
