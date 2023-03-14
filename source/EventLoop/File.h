@@ -54,8 +54,7 @@ public:
 
 		data->mCallback = this;
 		data->mType = EventLoop::SourceType::Open;
-		data->mInfo =
-			EventLoop::OPEN{.filename = &filename, .flags = flags, .mode = S_IRUSR};
+		data->mInfo = EventLoop::OPEN{.filename = &filename, .flags = flags, .mode = S_IRUSR};
 
 		mEv.QueueStandardRequest(std::move(data));
 	}
@@ -65,32 +64,30 @@ public:
 
 	void ReadAt();
 
-	void OnCompletion(
-			[[maybe_unused]] EventLoop::CompletionQueueEvent& cqe, const EventLoop::UserData* data) override 
+	void OnCompletion([[maybe_unused]] EventLoop::CompletionQueueEvent& cqe, const EventLoop::UserData* data) override
 	{
-		switch(data->mType) {
-			case EventLoop::SourceType::Open: {
-				mFd = cqe.res;
-				mIsOpen = true;
-				break;
-			}
-			case EventLoop::SourceType::Read: {
-				mHandler->OnReadCompletion();
-				break;
-			}
-			case EventLoop::SourceType::Write: {
-				mHandler->OnWriteCompletion();
-				break;
-			}
+		switch(data->mType)
+		{
+		case EventLoop::SourceType::Open: {
+			mFd = cqe.res;
+			mIsOpen = true;
+			break;
+		}
+		case EventLoop::SourceType::Read: {
+			mHandler->OnReadCompletion();
+			break;
+		}
+		case EventLoop::SourceType::Write: {
+			mHandler->OnWriteCompletion();
+			break;
+		}
 
-			// There should be no other operations here
-			default: {
-				assert(false);
-			}
+		// There should be no other operations here
+		default: {
+			assert(false);
+		}
 		}
 	}
-
-	
 
 private:
 	EventLoop::EventLoop& mEv;
@@ -103,7 +100,7 @@ private:
 class BufferedFile : public IFileHandler
 {
 public:
-	 ~BufferedFile() override = default;
+	~BufferedFile() override = default;
 
 	BufferedFile(const BufferedFile&) = default;
 	BufferedFile(BufferedFile&&) = delete;
