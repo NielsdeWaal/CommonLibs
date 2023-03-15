@@ -3,7 +3,9 @@
 
 #include "EventLoop.h"
 #include "UringCommands.h"
+#include <cstdint>
 #include <cstdio>
+#include <fcntl.h>
 
 constexpr std::uint32_t mMemoryDMAAlignment = 4096;
 constexpr std::uint32_t mDiskReadDmaAlignment = 4096;
@@ -35,8 +37,8 @@ class IFileHandler
 public:
 	virtual ~IFileHandler() = default;
 	virtual void OnFileOpen() = 0;
-	virtual void OnWriteCompletion() = 0;
-	virtual void OnReadCompletion() = 0;
+	virtual void OnWriteCompletion(std::size_t len) = 0;
+	virtual void OnReadCompletion(std::size_t len, char* buf) = 0;
 };
 
 // Generic file backend for specilized file implementations
@@ -46,7 +48,9 @@ public:
 	UringFile(EventLoop::EventLoop& ev, IFileHandler* fileHandler)
 		: mEv(ev)
 		, mHandler(fileHandler)
-	{}
+	{
+		mLogger = mEv.RegisterLogger("UringFile");
+	}
 
 	void FileOpen(std::string filename, int flags)
 	{
@@ -59,26 +63,48 @@ public:
 		mEv.QueueStandardRequest(std::move(data));
 	}
 
-	void WriteAt();
-	void Append();
+	void ReadAt(std::uint64_t pos, std::size_t len)
+	{
+		mLogger->info("Queueing read of size {}", len);
+		auto buf = std::make_unique<char[]>(len);
+		std::unique_ptr<EventLoop::UserData> data = std::make_unique<EventLoop::UserData>();
+		data->mCallback = this;
+		data->mType = EventLoop::SourceType::Read;
+		data->mInfo = EventLoop::READ{.fd = mFd, .buf = buf.release(), .len = len, .pos = pos};
 
-	void ReadAt();
+		mEv.QueueStandardRequest(std::move(data));
+	}
+
+	void WriteAt(std::vector<char> buf, std::uint64_t pos)
+	{
+		mLogger->info("Queueing write of size {}", buf.size());
+		std::unique_ptr<EventLoop::UserData> data = std::make_unique<EventLoop::UserData>();
+		data->mCallback = this;
+		data->mType = EventLoop::SourceType::Write;
+		data->mInfo = EventLoop::WRITE{.fd = mFd, .buf = buf.data(), .len = buf.size(), .pos = pos};
+
+		mEv.QueueStandardRequest(std::move(data));
+	}
+	void Append();
 
 	void OnCompletion([[maybe_unused]] EventLoop::CompletionQueueEvent& cqe, const EventLoop::UserData* data) override
 	{
 		switch(data->mType)
 		{
 		case EventLoop::SourceType::Open: {
+			mLogger->debug("New UringFile opened");
 			mFd = cqe.res;
 			mIsOpen = true;
+			mHandler->OnFileOpen();
 			break;
 		}
 		case EventLoop::SourceType::Read: {
-			mHandler->OnReadCompletion();
+			auto buf = std::get<EventLoop::READ>(data->mInfo);
+			mHandler->OnReadCompletion(cqe.res, static_cast<char*>(buf.buf));
 			break;
 		}
 		case EventLoop::SourceType::Write: {
-			mHandler->OnWriteCompletion();
+			mHandler->OnWriteCompletion(cqe.res);
 			break;
 		}
 
@@ -95,6 +121,8 @@ private:
 
 	int mFd{0};
 	bool mIsOpen{false};
+
+	std::shared_ptr<spdlog::logger> mLogger;
 };
 
 class BufferedFile : public IFileHandler
@@ -109,28 +137,83 @@ public:
 
 	BufferedFile(EventLoop::EventLoop& ev, const std::string& filename)
 		: mEv(ev)
+		, mFile(mEv, this)
 	{
-		std::unique_ptr<EventLoop::UserData> data = std::make_unique<EventLoop::UserData>();
-
-		data->mCallback = this;
-		data->mType = EventLoop::SourceType::Open;
-		data->mInfo = EventLoop::OPEN{.filename = filename, .flags = O_CREAT, .mode = S_IRUSR};
-
-		mEv.QueueStandardRequest(std::move(data));
+		mFile.FileOpen(filename, O_CREAT | O_RDWR);
 	}
 
-	void OnFileOpen() override;
-	void OnWriteCompletion() override;
-	void OnReadCompletion() override;
+	void OnFileOpen() override
+	{
+		mIsOpen = true;
+	}
+	void OnReadCompletion(std::size_t len, char* buf) override
+	{
+		mReq.buf = buf;
+		mReq.len = len;
+		mReq.completed = true;
+	}
+	void OnWriteCompletion(std::size_t len) override
+	{
+		mReq.completed = true;
+		mReq.len = len;
+	}
 
 	[[nodiscard]] bool IsOpen() const
 	{
 		return mIsOpen;
 	}
 
+	[[nodiscard]] bool ReqFinished() const
+	{
+		return mReq.completed;
+	}
+
+	[[nodiscard]] char* GetResBuf() const
+	{
+		return mReq.buf;
+	}
+
+	[[nodiscard]] std::size_t GetWriteSize() const
+	{
+		return mReq.len;
+	}
+
+	[[nodiscard]] std::size_t GetReadSize() const
+	{
+		return mReq.len;
+	}
+
+	void ReadAt(std::uint64_t pos, std::size_t len)
+	{
+		mFile.ReadAt(pos, len);
+		mReq.completed = false;
+		mReq.len = len;
+		mReq.pos = pos;
+	}
+
+	void WriteAt(std::vector<char> buf, std::uint64_t pos)
+	{
+		mFile.WriteAt(buf, pos);
+		mReq.completed = false;
+		mReq.len = 0;
+		mReq.pos = pos;
+	}
+
+	void FlushFile()
+	{}
+
 private:
+	struct OutstandingReq
+	{
+		std::size_t len;
+		std::uint64_t pos;
+		char* buf;
+		bool completed{false};
+	};
 	EventLoop::EventLoop& mEv;
+	UringFile mFile;
 	bool mIsOpen{false};
+	OutstandingReq mReq;
 };
 
 // class FileReader

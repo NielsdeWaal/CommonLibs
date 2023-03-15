@@ -5,6 +5,7 @@ set(testSources
   tcp.cpp
   websocket.cpp
   io_uring.cpp
+	file.cpp
   )
 
 find_package(Catch2 REQUIRED)
