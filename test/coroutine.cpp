@@ -79,12 +79,12 @@ TEST_CASE("Coroutine file read/write", "[EventLoop Coroutine]")
 			if(!mSubmitted)
 			{
 				mSubmitted = true;
-				int ret = co_await mEv.SubmitOpenAt("/tmp/eventloop_coroutine_file", O_CREAT, S_IRUSR);
+				int ret = co_await mEv.SubmitOpenAt("/tmp/eventloop_coroutine_file", O_CREAT | O_RDWR, S_IRUSR);
 				REQUIRE(ret != 0);
 				INFO("Got fd " << ret);
 				mFd = ret;
 
-				int size = co_await mEv.SubmitWrite(ret, mTestData.data(), 100, 0);
+				int size = co_await mEv.SubmitWrite(mFd, mTestData.data(), 100, 0);
 				REQUIRE(size == 100);
 
 				std::array<std::uint8_t, 100> verification{};
