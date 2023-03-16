@@ -167,7 +167,8 @@ public:
 	void RegisterFile(int fd);
 	void SubmitWritev();
 	void SubmitReadv();
-	void SubmitRead(std::uint64_t pos, void* buf, std::size_t len);
+	SqeAwaitable SubmitRead(int fd, std::uint64_t pos, void* buf, std::size_t len);
+	SqeAwaitable SubmitOpenAt(const char* path, int flags, mode_t mode);
 	void SubmitWrite();
 
 	/**
@@ -177,6 +178,8 @@ public:
 	 * direct IO and normal requests such as Send/Recv.
 	 */
 	void QueueStandardRequest(std::unique_ptr<UserData>);
+
+	SqeAwaitable AwaitWork(SubmissionQueueEvent* evt, std::uint8_t iflags);
 
 	void EnableStatistics() noexcept;
 

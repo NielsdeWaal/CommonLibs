@@ -6,6 +6,7 @@ set(testSources
   websocket.cpp
   io_uring.cpp
 	file.cpp
+	coroutine.cpp
   )
 
 find_package(Catch2 REQUIRED)

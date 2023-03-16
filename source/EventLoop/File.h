@@ -65,7 +65,7 @@ public:
 
 	void ReadAt(std::uint64_t pos, std::size_t len)
 	{
-		mLogger->info("Queueing read of size {}", len);
+		mLogger->debug("Queueing read of size {}", len);
 		auto buf = std::make_unique<char[]>(len);
 		std::unique_ptr<EventLoop::UserData> data = std::make_unique<EventLoop::UserData>();
 		data->mCallback = this;
@@ -77,7 +77,7 @@ public:
 
 	void WriteAt(std::vector<char> buf, std::uint64_t pos)
 	{
-		mLogger->info("Queueing write of size {}", buf.size());
+		mLogger->debug("Queueing write of size {}", buf.size());
 		std::unique_ptr<EventLoop::UserData> data = std::make_unique<EventLoop::UserData>();
 		data->mCallback = this;
 		data->mType = EventLoop::SourceType::Write;
@@ -86,6 +86,16 @@ public:
 		mEv.QueueStandardRequest(std::move(data));
 	}
 	void Append();
+
+	void Close() {
+		mLogger->debug("Closing file {}", mFd);
+		std::unique_ptr<EventLoop::UserData> data = std::make_unique<EventLoop::UserData>();
+		data->mCallback = this;
+		data->mType = EventLoop::SourceType::Close;
+		data->mInfo = EventLoop::CLOSE{.fd = mFd};
+
+		mEv.QueueStandardRequest(std::move(data));
+	}
 
 	void OnCompletion([[maybe_unused]] EventLoop::CompletionQueueEvent& cqe, const EventLoop::UserData* data) override
 	{
@@ -107,7 +117,9 @@ public:
 			mHandler->OnWriteCompletion(cqe.res);
 			break;
 		}
-
+		case EventLoop::SourceType::Close: {
+				break;
+			}
 		// There should be no other operations here
 		default: {
 			assert(false);
@@ -201,6 +213,11 @@ public:
 
 	void FlushFile()
 	{}
+
+	void CloseFile() {
+		mFile.Close();
+		mIsOpen = false;
+	}
 
 private:
 	struct OutstandingReq

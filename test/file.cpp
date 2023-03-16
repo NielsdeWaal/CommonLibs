@@ -69,6 +69,7 @@ TEST_CASE("Buffered file operations", "[EventLoop File]")
 			{
 				char* buf = mFile.GetResBuf();
 				REQUIRE(mFile.GetReadSize() == 11);
+				mFile.CloseFile();
 				mEv.Stop();
 			}
 			else if(mFile.IsOpen() && !mOpened)
@@ -85,7 +86,6 @@ TEST_CASE("Buffered file operations", "[EventLoop File]")
 
 		bool mOpened{false};
 		bool mWriteFinished{false};
-		bool mReadFinished{false};
 	};
 
 	EventLoop::EventLoop loop;
