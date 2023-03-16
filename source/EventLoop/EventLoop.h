@@ -169,7 +169,7 @@ public:
 	void SubmitReadv();
 	SqeAwaitable SubmitRead(int fd, std::uint64_t pos, void* buf, std::size_t len);
 	SqeAwaitable SubmitOpenAt(const char* path, int flags, mode_t mode);
-	void SubmitWrite();
+	SqeAwaitable SubmitWrite(int fd, const void* buf, std::size_t len, std::size_t offset);
 
 	/**
 	 * @brief Queue a standard io_uring request to the ring

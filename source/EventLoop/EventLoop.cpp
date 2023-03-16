@@ -504,10 +504,27 @@ SqeAwaitable EventLoop::SubmitRead(int fd, std::uint64_t pos, void* buf, std::si
 		assert(false);
 	}
 
-	mLogger->info("Creating read coroutine");
-	io_uring_sqe_set_data(evt, new UserData{.mHandleType = HandleType::Coroutine, .mType = SourceType::Read});
+	mLogger->info("Creating read coroutine, for fd: {}", fd);
+	// io_uring_sqe_set_data(evt, new UserData{.mHandleType = HandleType::Coroutine, .mType = SourceType::Read});
 
 	io_uring_prep_read(evt, fd, buf, len, pos);
+
+	return AwaitWork(evt, 0);
+}
+
+SqeAwaitable EventLoop::SubmitWrite(int fd, const void* buf, std::size_t len, std::size_t offset)
+{
+	SubmissionQueueEvent* evt = io_uring_get_sqe(&mIoUring);
+	if(evt == nullptr)
+	{
+		mLogger->critical("Unable to get new sqe from io_uring");
+		assert(false);
+	}
+
+	mLogger->info("Creating write coroutine, for fd: {}", fd);
+	// io_uring_sqe_set_data(evt, new UserData{.mHandleType = HandleType::Coroutine, .mType = SourceType::Read});
+
+	io_uring_prep_write(evt, fd, buf, len, offset);
 
 	return AwaitWork(evt, 0);
 }
@@ -526,7 +543,6 @@ SqeAwaitable EventLoop::SubmitOpenAt(const char* path, int flags, mode_t mode)
 
 	io_uring_prep_openat(evt, AT_FDCWD, path, flags, mode);
 	// int uringRet = io_uring_submit(&mIoUring);
-	mLogger->info("Submitted request");
 	return AwaitWork(evt, 0);
 }
 
