@@ -529,6 +529,23 @@ SqeAwaitable EventLoop::SubmitWrite(int fd, const void* buf, std::size_t len, st
 	return AwaitWork(evt, 0);
 }
 
+SqeAwaitable EventLoop::SubmitClose(int fd)
+{
+	SubmissionQueueEvent* evt = io_uring_get_sqe(&mIoUring);
+	if(evt == nullptr)
+	{
+		mLogger->critical("Unable to get new sqe from io_uring");
+		assert(false);
+	}
+
+	mLogger->info("Creating close coroutine, for fd: {}", fd);
+	// io_uring_sqe_set_data(evt, new UserData{.mHandleType = HandleType::Coroutine, .mType = SourceType::Read});
+
+	io_uring_prep_close(evt, fd);
+
+	return AwaitWork(evt, 0);
+	}
+
 SqeAwaitable EventLoop::SubmitOpenAt(const char* path, int flags, mode_t mode)
 {
 	SubmissionQueueEvent* evt = io_uring_get_sqe(&mIoUring);

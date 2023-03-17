@@ -170,6 +170,7 @@ public:
 	SqeAwaitable SubmitRead(int fd, std::uint64_t pos, void* buf, std::size_t len);
 	SqeAwaitable SubmitOpenAt(const char* path, int flags, mode_t mode);
 	SqeAwaitable SubmitWrite(int fd, const void* buf, std::size_t len, std::size_t offset);
+	SqeAwaitable SubmitClose(int fd);
 
 	/**
 	 * @brief Queue a standard io_uring request to the ring

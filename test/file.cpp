@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "DmaBuffer.h"
 #include "EventLoop.h"
 #include "File.h"
 
@@ -86,6 +87,88 @@ TEST_CASE("Buffered file operations", "[EventLoop File]")
 
 		bool mOpened{false};
 		bool mWriteFinished{false};
+	};
+
+	EventLoop::EventLoop loop;
+	loop.LoadConfig("Example.toml");
+	loop.Configure();
+
+	Handler test(loop);
+
+	loop.Run();
+
+	unlink("/tmp/eventloop_file");
+}
+
+TEST_CASE("Dma file creation", "[EventLoop File]")
+{
+	struct Handler : public EventLoop::IEventLoopCallbackHandler
+	{
+		explicit Handler(EventLoop::EventLoop& ev)
+			: mEv(ev)
+			, mFile(mEv, "/tmp/eventloop_file")
+		{
+			mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
+		}
+
+		void OnEventLoopCallback() final
+		{
+			if(mFile.IsOpen())
+			{
+				REQUIRE(access("/tmp/eventloop_file", F_OK) == 0);
+				mEv.Stop();
+			}
+		}
+
+	private:
+		EventLoop::EventLoop& mEv;
+		DmaFile mFile;
+	};
+
+	EventLoop::EventLoop loop;
+	loop.LoadConfig("Example.toml");
+	loop.Configure();
+
+	Handler test(loop);
+
+	loop.Run();
+
+	unlink("/tmp/eventloop_file");
+}
+
+TEST_CASE("Dma file read/write", "[EventLoop File]")
+{
+	struct Handler : public EventLoop::IEventLoopCallbackHandler
+	{
+		explicit Handler(EventLoop::EventLoop& ev)
+			: mEv(ev)
+			, mFile(mEv, "/tmp/eventloop_file")
+		{
+			mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
+		}
+
+		void OnEventLoopCallback() final
+		{
+			if(mFile.IsOpen())
+			{
+				REQUIRE(access("/tmp/eventloop_file", F_OK) == 0);
+				func();
+			}
+		}
+
+		EventLoop::uio::task<> func()
+		{
+			EventLoop::DmaBuffer testBuf(4096);
+			co_await mFile.WriteAt(testBuf, 0);
+
+			co_await mFile.Close();
+
+			mEv.Stop();
+		}
+
+	private:
+		EventLoop::EventLoop& mEv;
+		DmaFile mFile;
 	};
 
 	EventLoop::EventLoop loop;

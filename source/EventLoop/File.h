@@ -1,6 +1,7 @@
 #ifndef FILE_H
 #define FILE_H
 
+#include "DmaBuffer.h"
 #include "EventLoop.h"
 #include "UringCommands.h"
 #include <cstdint>
@@ -87,7 +88,8 @@ public:
 	}
 	void Append();
 
-	void Close() {
+	void Close()
+	{
 		mLogger->debug("Closing file {}", mFd);
 		std::unique_ptr<EventLoop::UserData> data = std::make_unique<EventLoop::UserData>();
 		data->mCallback = this;
@@ -118,8 +120,8 @@ public:
 			break;
 		}
 		case EventLoop::SourceType::Close: {
-				break;
-			}
+			break;
+		}
 		// There should be no other operations here
 		default: {
 			assert(false);
@@ -214,7 +216,8 @@ public:
 	void FlushFile()
 	{}
 
-	void CloseFile() {
+	void CloseFile()
+	{
 		mFile.Close();
 		mIsOpen = false;
 	}
@@ -231,6 +234,53 @@ private:
 	UringFile mFile;
 	bool mIsOpen{false};
 	OutstandingReq mReq;
+};
+
+class DmaFile
+{
+public:
+	DmaFile(EventLoop::EventLoop& ev, const std::string& filename)
+		: mEv(ev)
+	{
+		OpenAt(filename);
+	}
+
+	~DmaFile()
+	{
+		if(mFd)
+		{
+			mEv.SubmitClose(mFd);
+		}
+	}
+
+	EventLoop::uio::task<> OpenAt(const std::string filename)
+	{
+		// mFd = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR, S_IRUSR);
+		// int ret = co_await mEv.SubmitOpenAt("/tmp/eventloop_coroutine_file", O_CREAT | O_RDWR, S_IRUSR);
+		int ret = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR, S_IRUSR);
+		mFd = ret;
+	}
+
+	EventLoop::SqeAwaitable WriteAt(EventLoop::DmaBuffer& buf, std::size_t pos)
+	{
+		return mEv.SubmitWrite(mFd, buf.GetPtr(), buf.GetSize(), pos);
+	}
+
+	EventLoop::SqeAwaitable Close()
+	{
+		auto res = mEv.SubmitClose(mFd);
+		mFd = 0;
+		return res;
+	}
+
+	[[nodiscard]] bool IsOpen() const
+	{
+		return mFd != 0;
+	}
+
+private:
+	EventLoop::EventLoop& mEv;
+	int mFd{0};
 };
 
 // class FileReader
