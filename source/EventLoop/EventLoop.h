@@ -22,6 +22,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
+#include "DmaBuffer.h"
 #include "NonCopyable.h"
 #include "TSC.h"
 #include "UringCommands.h"
@@ -171,6 +172,12 @@ public:
 	SqeAwaitable SubmitOpenAt(const char* path, int flags, mode_t mode);
 	SqeAwaitable SubmitWrite(int fd, const void* buf, std::size_t len, std::size_t offset);
 	SqeAwaitable SubmitClose(int fd);
+
+	// TODO
+	// For now this just using aligned mallocs, maybe change this
+	// to use a memory pool with preallocated memory which has to be released
+	// back by the caller
+	DmaBuffer AllocateDmaBuffer(std::size_t size);
 
 	/**
 	 * @brief Queue a standard io_uring request to the ring
