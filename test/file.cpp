@@ -138,30 +138,46 @@ TEST_CASE("Dma file creation", "[EventLoop File]")
 
 TEST_CASE("Dma file read/write", "[EventLoop File]")
 {
-	struct Handler : public EventLoop::IEventLoopCallbackHandler
+	struct Handler //: public EventLoop::IEventLoopCallbackHandler
 	{
 		explicit Handler(EventLoop::EventLoop& ev)
 			: mEv(ev)
-			, mFile(mEv, "/tmp/eventloop_file")
+			// , mFile(mEv, "/tmp/eventloop_file")
+			, mFile(mEv)
 		{
-			mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
+			// mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
+			func();
 		}
 
-		void OnEventLoopCallback() final
-		{
-			if(mFile.IsOpen())
-			{
-				REQUIRE(access("/tmp/eventloop_file", F_OK) == 0);
-				func();
-			}
-		}
+		// void OnEventLoopCallback() final
+		// {
+		// 	if(mFile.IsOpen())
+		// 	{
+		// 		REQUIRE(access("/tmp/eventloop_file", F_OK) == 0);
+		// 		func();
+		// 	}
+		// }
 
 		EventLoop::uio::task<> func()
 		{
-			EventLoop::DmaBuffer testBuf(4096);
-			co_await mFile.WriteAt(testBuf, 0);
+			// mFile.Create("/tmp/eventloop_file");
+			// int a = co_await mFile.OpenAt("/tmp/eventloop_file");
+			co_await mFile.OpenAt("/tmp/eventloop_file");
 
-			co_await mFile.Close();
+			// EventLoop::DmaBuffer testBuf = mEv.AllocateDmaBuffer(4096);
+			EventLoop::DmaBuffer testBuf{4096};
+			int ret = co_await mFile.WriteAt(testBuf, 0);
+			REQUIRE(ret == 4096);
+
+			// EventLoop::DmaBuffer verificationBuf = mEv.AllocateDmaBuffer(4096);
+			// ret = co_await mFile.ReadAt(verificationBuf, 0);
+			// REQUIRE(ret == 4096);
+			EventLoop::DmaBuffer verBuf = co_await mFile.ReadAt(0, 4096);
+			REQUIRE(verBuf.GetSize() == 4096);
+
+			// co_await mFile.Close();
+
+			verBuf.Free();
 
 			mEv.Stop();
 		}
@@ -169,6 +185,57 @@ TEST_CASE("Dma file read/write", "[EventLoop File]")
 	private:
 		EventLoop::EventLoop& mEv;
 		DmaFile mFile;
+	};
+
+	EventLoop::EventLoop loop;
+	loop.LoadConfig("Example.toml");
+	loop.Configure();
+
+	Handler test(loop);
+
+	loop.Run();
+
+	unlink("/tmp/eventloop_file");
+}
+
+TEST_CASE("Dma append-only file", "[EventLoop File]")
+{
+	struct Handler
+	{
+		explicit Handler(EventLoop::EventLoop& ev)
+			: mEv(ev)
+			, mFile(mEv)
+		{
+			func();
+		}
+
+		EventLoop::uio::task<> func()
+		{
+			// mFile.Create("/tmp/eventloop_file");
+			// int a = co_await mFile.OpenAt("/tmp/eventloop_file");
+			co_await mFile.OpenAt("/tmp/eventloop_file");
+
+			// EventLoop::DmaBuffer testBuf = mEv.AllocateDmaBuffer(4096);
+			EventLoop::DmaBuffer testBuf{4096};
+			int ret = co_await mFile.Append(testBuf);
+			REQUIRE(ret == 4096);
+
+			// EventLoop::DmaBuffer verificationBuf = mEv.AllocateDmaBuffer(4096);
+			// ret = co_await mFile.ReadAt(verificationBuf, 0);
+			// REQUIRE(ret == 4096);
+			EventLoop::DmaBuffer verBuf = co_await mFile.ReadAt(0, 4096);
+			REQUIRE(verBuf.GetSize() == 4096);
+
+			// co_await mFile.Close();
+
+			verBuf.Free();
+
+			mEv.Stop();
+		}
+
+	private:
+		EventLoop::EventLoop& mEv;
+		AppendOnlyFile mFile;
 	};
 
 	EventLoop::EventLoop loop;
