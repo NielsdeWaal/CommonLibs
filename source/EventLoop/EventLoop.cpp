@@ -1,5 +1,6 @@
 #include "EventLoop.h"
 
+#include "DmaBuffer.h"
 #include "TSC.h"
 #include "UringCommands.h"
 #include "Util.h"
@@ -7,6 +8,7 @@
 #include <liburing.h>
 #include <liburing/io_uring.h>
 #include <memory>
+#include <spdlog/fmt/bundled/format.h>
 
 namespace EventLoop {
 
@@ -169,6 +171,7 @@ int EventLoop::Run()
 			if(cqe->res < 0)
 			{
 				mLogger->critical("Got error on completion event: {}", cqe->res);
+				assert(false);
 			}
 			else
 			{
@@ -176,15 +179,19 @@ int EventLoop::Run()
 				auto data = static_cast<UserData*>(io_uring_cqe_get_data(cqe));
 				if(data)
 				{
-					if(data->mHandleType == HandleType::Standard) {
+					if(data->mHandleType == HandleType::Standard)
+					{
 						data->mCallback->OnCompletion(*cqe, data);
-					} else if(data->mHandleType == HandleType::Coroutine) {
+					}
+					else if(data->mHandleType == HandleType::Coroutine)
+					{
 						data->mResolver->resolve(cqe->res);
 					}
 				}
 				else
 				{
 					mLogger->critical("received nullptr user_data on completion");
+					assert(false);
 				}
 			}
 			io_uring_cqe_seen(&mIoUring, cqe);
@@ -521,7 +528,7 @@ SqeAwaitable EventLoop::SubmitWrite(int fd, const void* buf, std::size_t len, st
 		assert(false);
 	}
 
-	mLogger->info("Creating write coroutine, for fd: {}", fd);
+	mLogger->info("Creating write coroutine, for fd: {}, size: {}, buf: {}", fd, len, fmt::ptr(buf));
 	// io_uring_sqe_set_data(evt, new UserData{.mHandleType = HandleType::Coroutine, .mType = SourceType::Read});
 
 	io_uring_prep_write(evt, fd, buf, len, offset);
@@ -544,7 +551,7 @@ SqeAwaitable EventLoop::SubmitClose(int fd)
 	io_uring_prep_close(evt, fd);
 
 	return AwaitWork(evt, 0);
-	}
+}
 
 SqeAwaitable EventLoop::SubmitOpenAt(const char* path, int flags, mode_t mode)
 {
@@ -563,11 +570,33 @@ SqeAwaitable EventLoop::SubmitOpenAt(const char* path, int flags, mode_t mode)
 	return AwaitWork(evt, 0);
 }
 
+SqeAwaitable EventLoop::SubmitStatx(int fd, struct statx* st)
+{
+	SubmissionQueueEvent* evt = io_uring_get_sqe(&mIoUring);
+	if(evt == nullptr)
+	{
+		mLogger->critical("Unable to get new sqe from io_uring");
+		assert(false);
+	}
+
+	mLogger->info("Creating statx coroutine");
+	// io_uring_sqe_set_data(evt, new UserData{.mHandleType = HandleType::Coroutine, .mType = SourceType::Open});
+
+	io_uring_prep_statx(evt, fd, "", AT_EMPTY_PATH, STATX_ALL, st);
+	// int uringRet = io_uring_submit(&mIoUring);
+	return AwaitWork(evt, 0);
+}
+
 SqeAwaitable EventLoop::AwaitWork(SubmissionQueueEvent* evt, std::uint8_t iflags)
 {
 	io_uring_sqe_set_flags(evt, iflags);
 
 	return SqeAwaitable(evt);
+}
+
+DmaBuffer EventLoop::AllocateDmaBuffer(std::size_t size)
+{
+	return {size};
 }
 
 std::shared_ptr<spdlog::logger> EventLoop::RegisterLogger(const std::string& module) const noexcept

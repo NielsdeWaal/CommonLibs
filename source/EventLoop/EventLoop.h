@@ -172,6 +172,7 @@ public:
 	SqeAwaitable SubmitOpenAt(const char* path, int flags, mode_t mode);
 	SqeAwaitable SubmitWrite(int fd, const void* buf, std::size_t len, std::size_t offset);
 	SqeAwaitable SubmitClose(int fd);
+	SqeAwaitable SubmitStatx(int fd, struct statx* st);
 
 	// TODO
 	// For now this just using aligned mallocs, maybe change this
