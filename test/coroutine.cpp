@@ -81,7 +81,6 @@ TEST_CASE("Coroutine file read/write", "[EventLoop Coroutine]")
 				mSubmitted = true;
 				int ret = co_await mEv.SubmitOpenAt("/tmp/eventloop_coroutine_file", O_CREAT | O_RDWR, S_IRUSR);
 				REQUIRE(ret != 0);
-				INFO("Got fd " << ret);
 				mFd = ret;
 
 				int size = co_await mEv.SubmitWrite(mFd, mTestData.data(), 100, 0);
