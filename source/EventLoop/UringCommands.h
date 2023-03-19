@@ -352,6 +352,13 @@ struct task_promise<void, nothrow> final : task_promise_base<void, nothrow>
 	}
 };
 
+// helper type for the visitor #4
+template<class... Ts>
+struct overloaded : Ts...
+{
+	using Ts::operator()...;
+};
+
 /**
  * An awaitable object that returned by an async function
  * @tparam T value type holded by this task
@@ -384,7 +391,7 @@ struct task final
 		return get_result();
 	}
 
-	/** Get the result hold by this task */
+	/** Get the result held by this task */
 	T get_result() const
 	{
 		auto& result_ = coro_.promise().result_;
@@ -398,7 +405,30 @@ struct task final
 		}
 		if constexpr(!std::is_void_v<T>)
 		{
+			// FIXME this needs a special method to allow
+			// for move-only types. The get_if function returns a ptr,
+			// which in this case will call into the copy assignment
+			// if constexpr(std::is_copy_constructible_v<T>) {
 			return *std::get_if<1>(&result_);
+			// } else {
+			// 	return std::move(T{std::get<T>(std::move(coro_.promise().result_))});
+			// T temp;
+			// std::visit(overloaded {
+			// 	[&temp](auto&& moved) {
+			// 		temp = std::move(moved);
+			// 	},
+			// 	[](std::monostate) {
+			// 		return;
+			// 	},
+			// 	[](std::exception_ptr) {
+			// 		return;
+			// 	}
+			// },
+			// 	result_);
+			// return std::get_if<1>(coro_.promise().result_);
+			// return std::get<T>(std::move(coro_.promise().result_));
+			// return std::move(*std::get_if<1>(&result_));
+			// }
 		}
 	}
 
