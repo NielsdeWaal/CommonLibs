@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <fcntl.h>
+#include <iostream>
+#include <sys/stat.h>
 
 constexpr std::uint32_t mMemoryDMAAlignment = 4096;
 constexpr std::uint32_t mDiskReadDmaAlignment = 4096;
@@ -239,6 +241,9 @@ private:
 class DmaFile
 {
 public:
+	DmaFile(EventLoop::EventLoop& ev)
+		: mEv(ev)
+	{}
 	DmaFile(EventLoop::EventLoop& ev, const std::string& filename)
 		: mEv(ev)
 	{
@@ -257,13 +262,61 @@ public:
 	{
 		// mFd = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR, S_IRUSR);
 		// int ret = co_await mEv.SubmitOpenAt("/tmp/eventloop_coroutine_file", O_CREAT | O_RDWR, S_IRUSR);
-		int ret = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR, S_IRUSR);
+		int ret = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR | O_DIRECT, S_IRUSR | S_IWUSR);
+		// int ret = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR, S_IRUSR);
 		mFd = ret;
+
+		// TODO retrieve io size for alignment for the device
+		// Can be retrieved using the minor and major dev identifiers
+		// in /sys/dev/{blockmajor_dev}:{mminor_dev}/queue/{logical_block_size,minimum_io_size}.
+		// Minor does have to be 0 here as the minor value indicates the partition and we
+		// need to look at the block device itself
+		ret = co_await mEv.SubmitStatx(mFd, &mSt);
+		// std::cout << "Major " << mSt.stx_dev_major << " Minor " << mSt.stx_dev_minor << std::endl;
+		// co_return mFd;
+		// return mFd;
+		// co_return 0;
+		co_return;
 	}
+
+	// EventLoop::SqeAwaitable Create(const std::string filename)
+	// {
+	// 	// int ret = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR, S_IRUSR);
+	// 	mFd = ret;
+
+	// 	// TODO retrieve io size for alignment for the device
+	// 	// Can be retrieved using the minor and major dev identifiers
+	// 	// in /sys/dev/{blockmajor_dev}:{mminor_dev}/queue/{logical_block_size,minimum_io_size}.
+	// 	// Minor does have to be 0 here as the minor value indicates the partition and we
+	// 	// need to look at the block device itself
+	// 	ret = co_await mEv.SubmitStatx(mFd, &mSt);
+	// 	std::cout << "Major " << mSt.stx_dev_major << " Minor " << mSt.stx_dev_minor << std::endl;
+	// }
 
 	EventLoop::SqeAwaitable WriteAt(EventLoop::DmaBuffer& buf, std::size_t pos)
 	{
 		return mEv.SubmitWrite(mFd, buf.GetPtr(), buf.GetSize(), pos);
+	}
+
+	// EventLoop::SqeAwaitable ReadAt(EventLoop::DmaBuffer& buf, std::size_t pos)
+	// {
+	// 	return mEv.SubmitRead(mFd, pos, buf.GetPtr(), buf.GetSize());
+	// }
+
+	EventLoop::uio::task<EventLoop::DmaBuffer> ReadAt(std::uint64_t pos, std::size_t len)
+	{
+		assert(len <= 4096);
+		auto buf = mEv.AllocateDmaBuffer(4096);
+		int ret = co_await mEv.SubmitRead(mFd, pos, buf.GetPtr(), len);
+		assert(ret >= 0);
+		buf.TrimSize(ret);
+		co_return std::move(buf);
+		// co_return buf;
+	}
+
+	EventLoop::uio::task<> ReadMany(std::vector<iovec> iovecs)
+	{
+		co_return;
 	}
 
 	EventLoop::SqeAwaitable Close()
@@ -281,6 +334,83 @@ public:
 private:
 	EventLoop::EventLoop& mEv;
 	int mFd{0};
+	std::size_t mODirectAlignment{512};
+	struct statx mSt;
+};
+
+class AppendOnlyFile
+{
+public:
+	AppendOnlyFile(EventLoop::EventLoop& ev)
+		: mEv(ev)
+	{}
+	AppendOnlyFile(EventLoop::EventLoop& ev, const std::string& filename)
+		: mEv(ev)
+	{
+		OpenAt(filename);
+	}
+
+	~AppendOnlyFile()
+	{
+		if(mFd)
+		{
+			mEv.SubmitClose(mFd);
+		}
+	}
+
+	EventLoop::uio::task<> OpenAt(const std::string filename)
+	{
+		int ret =
+			co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR | O_DIRECT | O_APPEND, S_IRUSR | S_IWUSR);
+		mFd = ret;
+
+		// TODO retrieve io size for alignment for the device
+		// Can be retrieved using the minor and major dev identifiers
+		// in /sys/dev/{blockmajor_dev}:{mminor_dev}/queue/{logical_block_size,minimum_io_size}.
+		// Minor does have to be 0 here as the minor value indicates the partition and we
+		// need to look at the block device itself
+		ret = co_await mEv.SubmitStatx(mFd, &mSt);
+		co_return;
+	}
+
+	EventLoop::SqeAwaitable Append(EventLoop::DmaBuffer& buf)
+	{
+		return mEv.SubmitWrite(mFd, buf.GetPtr(), buf.GetSize(), 0);
+	}
+
+	EventLoop::uio::task<EventLoop::DmaBuffer> ReadAt(std::uint64_t pos, std::size_t len)
+	{
+		assert(len <= 4096);
+		auto buf = mEv.AllocateDmaBuffer(4096);
+		int ret = co_await mEv.SubmitRead(mFd, pos, buf.GetPtr(), len);
+		assert(ret >= 0);
+		buf.TrimSize(ret);
+		co_return std::move(buf);
+		// co_return buf;
+	}
+
+	EventLoop::uio::task<> ReadMany(std::vector<iovec> iovecs)
+	{
+		co_return;
+	}
+
+	EventLoop::SqeAwaitable Close()
+	{
+		auto res = mEv.SubmitClose(mFd);
+		mFd = 0;
+		return res;
+	}
+
+	[[nodiscard]] bool IsOpen() const
+	{
+		return mFd != 0;
+	}
+
+private:
+	EventLoop::EventLoop& mEv;
+	int mFd{0};
+	std::size_t mODirectAlignment{512};
+	struct statx mSt;
 };
 
 // class FileReader
