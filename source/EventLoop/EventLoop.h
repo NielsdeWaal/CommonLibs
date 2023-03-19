@@ -22,6 +22,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
+#include "DmaBuffer.h"
 #include "NonCopyable.h"
 #include "TSC.h"
 #include "UringCommands.h"
@@ -167,8 +168,17 @@ public:
 	void RegisterFile(int fd);
 	void SubmitWritev();
 	void SubmitReadv();
-	void SubmitRead(std::uint64_t pos, void* buf, std::size_t len);
-	void SubmitWrite();
+	SqeAwaitable SubmitRead(int fd, std::uint64_t pos, void* buf, std::size_t len);
+	SqeAwaitable SubmitOpenAt(const char* path, int flags, mode_t mode);
+	SqeAwaitable SubmitWrite(int fd, const void* buf, std::size_t len, std::size_t offset);
+	SqeAwaitable SubmitClose(int fd);
+	SqeAwaitable SubmitStatx(int fd, struct statx* st);
+
+	// TODO
+	// For now this just using aligned mallocs, maybe change this
+	// to use a memory pool with preallocated memory which has to be released
+	// back by the caller
+	DmaBuffer AllocateDmaBuffer(std::size_t size);
 
 	/**
 	 * @brief Queue a standard io_uring request to the ring
@@ -177,6 +187,8 @@ public:
 	 * direct IO and normal requests such as Send/Recv.
 	 */
 	void QueueStandardRequest(std::unique_ptr<UserData>);
+
+	SqeAwaitable AwaitWork(SubmissionQueueEvent* evt, std::uint8_t iflags);
 
 	void EnableStatistics() noexcept;
 

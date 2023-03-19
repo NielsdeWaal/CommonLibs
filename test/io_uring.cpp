@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <memory>
@@ -340,6 +341,109 @@ TEST_CASE("io_uring close", "[EventLoop io_uring]")
 
 	loop.Run();
 
+	unlink("/tmp/io_uring_test");
+}
+
+TEST_CASE("io_uring append", "[EventLoop io_uring]")
+{
+	struct Handler : public EventLoop::IUringCallbackHandler
+	{
+		explicit Handler(EventLoop::EventLoop& ev)
+			: mEv(ev)
+		{
+			for(int i = 0; i < 200; ++i)
+			{
+				mTestData.at(i) = i;
+			}
+
+			std::unique_ptr<EventLoop::UserData> data = std::make_unique<EventLoop::UserData>();
+
+			data->mCallback = this;
+			data->mType = EventLoop::SourceType::Open;
+			data->mInfo = EventLoop::OPEN{.filename = new std::string{"/tmp/io_uring_test"},
+				.flags = O_CREAT | O_RDWR | O_APPEND,
+				.mode = S_IRWXU};
+
+			mEv.QueueStandardRequest(std::move(data));
+		}
+
+		void OnCompletion(
+			[[maybe_unused]] EventLoop::CompletionQueueEvent& cqe, const EventLoop::UserData* data) override
+		{
+			switch(data->mType)
+			{
+			case EventLoop::SourceType::Open: {
+				REQUIRE(true);
+				std::unique_ptr<EventLoop::UserData> writeData = std::make_unique<EventLoop::UserData>();
+
+				mFd = cqe.res;
+
+				writeData->mCallback = this;
+				writeData->mType = EventLoop::SourceType::Write;
+				writeData->mInfo = EventLoop::WRITE{.fd = mFd, .buf = mTestData.data(), .len = 100, .pos = 0};
+
+				mEv.QueueStandardRequest(std::move(writeData));
+				break;
+			}
+			case EventLoop::SourceType::Write: {
+				if(mFirstWrite)
+				{
+					REQUIRE(true);
+					std::unique_ptr<EventLoop::UserData> writeData = std::make_unique<EventLoop::UserData>();
+
+					REQUIRE(cqe.res == 100);
+
+					writeData->mCallback = this;
+					writeData->mType = EventLoop::SourceType::Write;
+					writeData->mInfo =
+						EventLoop::WRITE{
+							.fd = mFd, .buf = mTestData.data() + 100, .len = 100, .pos = 0};
+
+					mEv.QueueStandardRequest(std::move(writeData));
+
+					mFirstWrite = false;
+					break;
+				}
+				else
+				{
+					REQUIRE(cqe.res == 100);
+					std::array<std::uint8_t, 200> verification{};
+					std::size_t ret = ::read(mFd, verification.data(), verification.size());
+
+					REQUIRE(ret == 200);
+
+					for(int i = 0; i < 200; ++i)
+					{
+						REQUIRE(mTestData.at(i) == verification.at(i));
+					}
+
+					mEv.Stop();
+				}
+				break;
+			}
+			default: {
+				// This case should never be hit
+				REQUIRE(false);
+				mEv.Stop();
+				break;
+			}
+			}
+		}
+
+	private:
+		EventLoop::EventLoop& mEv;
+		int mFd{0};
+		std::array<std::uint8_t, 200> mTestData{};
+		bool mFirstWrite{true};
+	};
+
+	EventLoop::EventLoop loop;
+	loop.LoadConfig("Example.toml");
+	loop.Configure();
+
+	Handler test(loop);
+
+	loop.Run();
 	unlink("/tmp/io_uring_test");
 }
 

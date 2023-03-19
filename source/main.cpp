@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string>
 #include <vector>
+#include <limits>
 
 #include <cpptoml.h>
 #include <spdlog/spdlog.h>

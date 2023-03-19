@@ -1,5 +1,5 @@
 add_compile_options(-std=c++20 -Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wunused -Wpedantic)
-set(EventLoopHeaders EventLoop.h File.h UringCommands.h Topology.h)
+set(EventLoopHeaders EventLoop.h File.h UringCommands.h DmaBuffer.h Topology.h)
 set(EventLoopSources EventLoop.cpp)
 
 add_library(EventLoop STATIC ${EventLoopHeaders} ${EventLoopSources})
