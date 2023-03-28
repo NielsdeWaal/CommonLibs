@@ -331,6 +331,11 @@ public:
 		return mFd != 0;
 	}
 
+	[[nodiscard]] std::size_t FileSize() const 
+	{ 
+		return mSt.stx_size;
+	}
+
 private:
 	EventLoop::EventLoop& mEv;
 	int mFd{0};
