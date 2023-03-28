@@ -1,9 +1,13 @@
 #ifndef __URINGCOMMANDS_H_
 #define __URINGCOMMANDS_H_
 
+#include <cassert>
 #include <cstdint>
+#include <functional>
+#include <liburing.h>
 #include <liburing/io_uring.h>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <variant>
@@ -164,6 +168,8 @@ struct resolver
 	virtual void resolve(int result) noexcept = 0;
 };
 
+struct SqeAwaitable;
+
 // FIXME We want to make sure that the request type inherits from the marker
 // template<class RequestData, typename std::enable_if_t<std::is_base_of_v<UringCommandMarker, RequestData>>>
 // FIXME We cannot use templates to determine the type of RequestData.
@@ -177,6 +183,7 @@ struct alignas(64) UserData
 	SourceType mType = SourceType::Invalid;
 	UringCommand mInfo{NOP{}};
 	resolver* mResolver{nullptr};
+	SqeAwaitable* mAwaitable;
 	// RequestData mData;
 };
 
@@ -196,6 +203,41 @@ private:
 };
 static_assert(std::is_trivially_destructible_v<resume_resolver>);
 
+struct deferred_resolver final
+	: resolver
+	, public Common::NonCopyable<deferred_resolver>
+{
+	void resolve(int result) noexcept override
+	{
+		this->result = result;
+	}
+
+#ifndef NDEBUG
+	~deferred_resolver()
+	{
+		assert(!!result && "deferred_resolver is destructed before it's resolved");
+	}
+#endif
+
+	std::optional<int> result;
+};
+
+struct callback_resolver final : resolver
+{
+	callback_resolver(std::function<void(int result)>&& cb)
+		: cb(std::move(cb))
+	{}
+
+	void resolve(int result) noexcept override
+	{
+		this->cb(result);
+		delete this;
+	}
+
+private:
+	std::function<void(int result)> cb;
+};
+
 struct SqeAwaitable
 {
 	// TODO: use cancel_token to implement cancellation
@@ -208,9 +250,19 @@ struct SqeAwaitable
 	//     io_uring_sqe_set_data(sqe, &resolver);
 	// }
 
-	// void set_callback(std::function<void (int result)> cb) {
-	//     io_uring_sqe_set_data(sqe, new callback_resolver(std::move(cb)));
-	// }
+	void SetupData(deferred_resolver& resolver)
+	{
+		UserData* data = new UserData{.mHandleType = HandleType::Coroutine, .mResolver = &resolver};
+		io_uring_sqe_set_data(sqe, data);
+	}
+
+	void SetCallback(std::function<void(int result)> cb)
+	{
+		// io_uring_sqe_set_data(sqe, new callback_resolver(std::move(cb)));
+		UserData* data =
+			new UserData{.mHandleType = HandleType::Coroutine, .mResolver = (resolver*)new callback_resolver(std::move(cb))};
+		io_uring_sqe_set_data(sqe, data);
+	}
 
 	auto operator co_await()
 	{
@@ -221,7 +273,10 @@ struct SqeAwaitable
 
 			await_sqe(io_uring_sqe* sqe)
 				: sqe(sqe)
-			{}
+			{
+				// UserData* data = new UserData{.mHandleType = HandleType::Coroutine, .mResolver = &resolver};
+				// io_uring_sqe_set_data(sqe, data);
+			}
 
 			constexpr bool await_ready() const noexcept
 			{
@@ -232,7 +287,8 @@ struct SqeAwaitable
 			{
 				resolver.handle = handle;
 				// io_uring_sqe_set_data(sqe, &resolver);
-				io_uring_sqe_set_data(sqe, new UserData{.mHandleType = HandleType::Coroutine, .mResolver = &resolver});
+				UserData* data = new UserData{.mHandleType = HandleType::Coroutine, .mResolver = &resolver};
+				io_uring_sqe_set_data(sqe, data);
 			}
 
 			constexpr int await_resume() const noexcept
@@ -250,6 +306,7 @@ private:
 	// EventLoop& mEv;
 	io_uring_sqe* sqe;
 	HandleType mType{HandleType::Coroutine};
+	std::optional<int> mResult;
 };
 
 namespace uio {
