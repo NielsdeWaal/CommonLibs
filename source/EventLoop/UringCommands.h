@@ -191,9 +191,11 @@ struct resume_resolver final : resolver
 {
 	friend struct SqeAwaitable;
 
-	void resolve(int result) noexcept override
+	~resume_resolver() = default;
+
+	void resolve(int res) noexcept override
 	{
-		this->result = result;
+		this->result = res;
 		handle.resume();
 	}
 
@@ -207,9 +209,10 @@ struct deferred_resolver final
 	: resolver
 	, public Common::NonCopyable<deferred_resolver>
 {
-	void resolve(int result) noexcept override
+
+	void resolve(int res) noexcept override
 	{
-		this->result = result;
+		this->result = res;
 	}
 
 #ifndef NDEBUG
@@ -224,8 +227,8 @@ struct deferred_resolver final
 
 struct callback_resolver final : resolver
 {
-	callback_resolver(std::function<void(int result)>&& cb)
-		: cb(std::move(cb))
+	callback_resolver(std::function<void(int result)>&& callback)
+		: cb(std::move(callback))
 	{}
 
 	void resolve(int result) noexcept override
@@ -242,7 +245,7 @@ struct SqeAwaitable
 {
 	// TODO: use cancel_token to implement cancellation
 	explicit SqeAwaitable(io_uring_sqe* sqe) noexcept
-		: sqe(sqe)
+		: awaitable(sqe)
 	{}
 
 	// User MUST keep resolver alive before the operation is finished
@@ -253,15 +256,15 @@ struct SqeAwaitable
 	void SetupData(deferred_resolver& resolver)
 	{
 		UserData* data = new UserData{.mHandleType = HandleType::Coroutine, .mResolver = &resolver};
-		io_uring_sqe_set_data(sqe, data);
+		io_uring_sqe_set_data(awaitable, data);
 	}
 
-	void SetCallback(std::function<void(int result)> cb)
+	void SetCallback(std::function<void(int result)> callback)
 	{
 		// io_uring_sqe_set_data(sqe, new callback_resolver(std::move(cb)));
 		UserData* data =
-			new UserData{.mHandleType = HandleType::Coroutine, .mResolver = (resolver*)new callback_resolver(std::move(cb))};
-		io_uring_sqe_set_data(sqe, data);
+			new UserData{.mHandleType = HandleType::Coroutine, .mResolver = (resolver*)new callback_resolver(std::move(callback))};
+		io_uring_sqe_set_data(awaitable, data);
 	}
 
 	auto operator co_await()
@@ -269,10 +272,10 @@ struct SqeAwaitable
 		struct await_sqe
 		{
 			resume_resolver resolver{};
-			io_uring_sqe* sqe;
+			io_uring_sqe* awaitableSqe;
 
-			await_sqe(io_uring_sqe* sqe)
-				: sqe(sqe)
+			await_sqe(io_uring_sqe* newSqe)
+				: awaitableSqe(newSqe)
 			{
 				// UserData* data = new UserData{.mHandleType = HandleType::Coroutine, .mResolver = &resolver};
 				// io_uring_sqe_set_data(sqe, data);
@@ -288,7 +291,7 @@ struct SqeAwaitable
 				resolver.handle = handle;
 				// io_uring_sqe_set_data(sqe, &resolver);
 				UserData* data = new UserData{.mHandleType = HandleType::Coroutine, .mResolver = &resolver};
-				io_uring_sqe_set_data(sqe, data);
+				io_uring_sqe_set_data(awaitableSqe, data);
 			}
 
 			constexpr int await_resume() const noexcept
@@ -298,13 +301,13 @@ struct SqeAwaitable
 			}
 		};
 
-		return await_sqe(sqe);
+		return await_sqe(awaitable);
 	}
 
 private:
 	// EventLoop::EventLoop& mEv;
 	// EventLoop& mEv;
-	io_uring_sqe* sqe;
+	io_uring_sqe* awaitable;
 	HandleType mType{HandleType::Coroutine};
 	std::optional<int> mResult;
 };

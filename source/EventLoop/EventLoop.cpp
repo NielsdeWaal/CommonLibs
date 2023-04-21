@@ -162,12 +162,12 @@ int EventLoop::Run()
 		 *
 		 * TODO Should probably move to something like a `peek` function
 		 */
-		const int submitRet = io_uring_submit(&mIoUring);
+		io_uring_submit(&mIoUring);
 		::io_uring_cqe* cqe = nullptr;
 		const int peekRet = io_uring_peek_cqe(&mIoUring, &cqe);
 		if(peekRet == 0)
 		{
-			mLogger->info("Got uring completion event, res: {}", cqe->res);
+			mLogger->debug("Got uring completion event, res: {}", cqe->res);
 			if(cqe->res < 0)
 			{
 				mLogger->critical("Got error on completion event: {}", cqe->res);
@@ -176,12 +176,12 @@ int EventLoop::Run()
 			else
 			{
 				// auto* data = reinterpret_cast<UserData*>(cqe->user_data);
-				auto data = static_cast<UserData*>(io_uring_cqe_get_data(cqe));
+				std::unique_ptr<UserData> data(static_cast<UserData*>(io_uring_cqe_get_data(cqe)));
 				if(data)
 				{
 					if(data->mHandleType == HandleType::Standard)
 					{
-						data->mCallback->OnCompletion(*cqe, data);
+						data->mCallback->OnCompletion(*cqe, data.get());
 					}
 					else if(data->mHandleType == HandleType::Coroutine)
 					{
@@ -293,7 +293,9 @@ int EventLoop::Run()
 }
 
 void EventLoop::RegisterFile(int fd)
-{}
+{
+	io_uring_register_files(&mIoUring, &fd, 1);
+}
 
 void EventLoop::AddTimer(Timer* timer)
 {
@@ -528,7 +530,7 @@ SqeAwaitable EventLoop::SubmitWrite(int fd, const void* buf, std::size_t len, st
 		assert(false);
 	}
 
-	mLogger->info("Creating write coroutine, for fd: {}, size: {}, buf: {}", fd, len, fmt::ptr(buf));
+	mLogger->debug("Creating write coroutine, for fd: {}, size: {}, buf: {}", fd, len, fmt::ptr(buf));
 	// io_uring_sqe_set_data(evt, new UserData{.mHandleType = HandleType::Coroutine, .mType = SourceType::Read});
 
 	io_uring_prep_write(evt, fd, buf, len, offset);

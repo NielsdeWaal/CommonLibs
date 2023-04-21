@@ -314,7 +314,7 @@ public:
 		// co_return buf;
 	}
 
-	EventLoop::uio::task<> ReadMany(std::vector<iovec> iovecs)
+	EventLoop::uio::task<> ReadMany([[maybe_unused]] std::vector<iovec> iovecs)
 	{
 		co_return;
 	}
@@ -334,6 +334,10 @@ public:
 	[[nodiscard]] std::size_t FileSize() const 
 	{ 
 		return mSt.stx_size;
+	}
+
+	[[nodiscard]] int GetFd() const {
+		return mFd;
 	}
 
 private:
@@ -394,7 +398,7 @@ public:
 		// co_return buf;
 	}
 
-	EventLoop::uio::task<> ReadMany(std::vector<iovec> iovecs)
+	EventLoop::uio::task<> ReadMany([[maybe_unused]] std::vector<iovec> iovecs)
 	{
 		co_return;
 	}

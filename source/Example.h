@@ -31,12 +31,12 @@ class ExampleApp : public EventLoop::IEventLoopCallbackHandler
 public:
 	ExampleApp(EventLoop::EventLoop& ev)
 		: mEv(ev)
-		, mTimer(1s, EventLoop::EventLoop::TimerType::Repeating, [this](){ OnTimerCallback(); })
+		// , mTimer(1s, EventLoop::EventLoop::TimerType::Repeating, [this](){ OnTimerCallback(); })
 		, mSocket(mEv, this)
 		//, mServer(mEv, this)
 		//, mUDPClient(mEv, this)
 		//, mMQTTClient(mEv, this)
-		, mSW(mEv)
+		// , mSW(mEv)
 	{
 		mLogger = mEv.RegisterLogger("ExampleApp");
 		//mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
@@ -65,15 +65,15 @@ public:
 
 	void Initialise()
 	{
-		mEv.AddTimer(&mTimer);
+		// mEv.AddTimer(&mTimer);
 		//mServer.BindAndListen(1337);
 		//mSocket.Connect("127.0.0.1", 1337);
 		//mWebsocket.Connect("127.0.0.1", 1337);
-		mSocket.Connect("174.129.224.73", 443);
+		// mSocket.Connect("174.129.224.73", 443);
 		//mSocket.Connect("127.0.0.1", 31337);
 		//mMQTTClient.Connect("127.0.0.1", mMQTTPort);
-		mSW.InfluxConnector("127.0.0.1", mInfluxPort);
-		mSW.SetBatchWriting(5s);
+		// mSW.InfluxConnector("127.0.0.1", mInfluxPort);
+		// mSW.SetBatchWriting(5s);
 	}
 
 	void OnTimerCallback()
@@ -136,7 +136,7 @@ public:
 
 private:
 	EventLoop::EventLoop& mEv;
-	EventLoop::EventLoop::Timer mTimer;
+	// EventLoop::EventLoop::Timer mTimer;
 
 	//Common::StreamSocket mSocket;
 	websocketClient mSocket;
@@ -151,7 +151,7 @@ private:
 
 	std::string Teststring{"Test string"};
 
-	StatWriter::StatWriter mSW;
+	// StatWriter::StatWriter mSW;
 	int mInfluxPort;
 	float mDebugMeasurementCounter = 0;
 	int mDebugMeasurementCounter1 = 8;

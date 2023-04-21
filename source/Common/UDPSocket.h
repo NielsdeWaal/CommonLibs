@@ -25,7 +25,7 @@ class IUDPSocketHandler
 public:
 	// virtual void OnConnected() = 0;
 	// virtual void OnDisconnect() = 0;
-	// virtual void OnIncomingData(char* data, size_t len) = 0;
+	virtual void OnIncomingData(char* data, size_t len) = 0;
 	virtual ~IUDPSocketHandler()
 	{}
 };
@@ -37,6 +37,7 @@ public:
 		: mEventLoop(ev)
 		, mHandler(handler)
 		, mFd(::socket(AF_INET, SOCK_DGRAM, 0))
+		, readBuf(static_cast<char*>(std::aligned_alloc(512, 32000)))
 	{
 		mLogger = mEventLoop.RegisterLogger("UDPSocket");
 
@@ -76,7 +77,24 @@ public:
 	}
 
 	void StartListening([[maybe_unused]] const char* localAddr, [[maybe_unused]] const uint16_t localPort) noexcept
-	{}
+	{
+		assert(localPort > 0);
+
+		remote.sin_family = AF_INET;
+		remote.sin_port = htons(localPort);
+		remote.sin_addr.s_addr = htonl(INADDR_ANY);
+
+		mLogger->info("Binding UDP socket to {}", localPort);
+
+		const int ret = ::bind(mFd, (struct sockaddr*)&remote, sizeof(struct sockaddr));
+
+		if(ret == -1) {
+			mLogger->critical("Failed to bind socket: {}", ret);
+		}
+
+		
+		mEventLoop.RegisterFiledescriptor(mFd, EPOLLIN | EPOLLOUT, this);
+	}
 
 	void Send(const char* data, size_t len, const char* dst = nullptr, const uint16_t port = 0) const noexcept
 	{
@@ -115,10 +133,23 @@ public:
 
 private:
 	void OnFiledescriptorWrite([[maybe_unused]] int fd) final
-	{}
+	{
+		// mLogger->info("File descriptor write");
+	}
 
 	void OnFiledescriptorRead([[maybe_unused]] int fd) final
-	{}
+	{
+		mLogger->trace("File descriptor read");
+		// recvfrom(s, buf, BUFLEN, 0, (struct sockaddr *) &si_other, &slen))
+		struct sockaddr_in in;
+		std::uint32_t sockLen = sizeof(in);
+		const std::size_t len = ::recvfrom(mFd, readBuf.get(), 32000, 0, (struct sockaddr*)&in, &sockLen);
+
+		if(len > 0) {
+			mLogger->debug("Received from: {}", inet_ntoa(in.sin_addr));
+			mHandler->OnIncomingData(readBuf.get(), len);
+		}
+	}
 
 private:
 	EventLoop::EventLoop& mEventLoop;
@@ -130,6 +161,9 @@ private:
 	struct sockaddr_in remote;
 
 	uint16_t mPort = 0;
+
+	// std::array<char, 5000> readBuf{0};
+	std::unique_ptr<char> readBuf;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };

@@ -3,6 +3,11 @@
 
 #include "EventLoop.h"
 
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+
 namespace Common {
 
 using namespace EventLoop;
@@ -42,6 +47,7 @@ public:
 		, mFd(fd)
 	{
 		mEventLoop.RegisterFiledescriptor(fd, EPOLLIN, this);
+		mLogger = mEventLoop.RegisterLogger("StreamSocket");
 		mConnected = true;
 	}
 
@@ -186,8 +192,7 @@ private:
 			}
 		}
 		else if(mSendInProgress)
-		{
-		}
+		{}
 		else // TODO Make check for connection after sending data i.e check for ack
 		{
 			// mLogger->info("Connection has shutdown, closing socket");
