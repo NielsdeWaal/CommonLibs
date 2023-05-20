@@ -12,10 +12,10 @@ set(testSources
   )
 
 find_package(Catch2 REQUIRED)
-add_executable(tests ${testSources})
+add_executable(cl-tests ${testSources})
 # target_compile_options(tests PRIVATE -fno-omit-frame-pointer -fsanitize=address)
 # target_link_options(tests PRIVATE -fno-omit-frame-pointer -fsanitize=address)
-target_link_libraries(tests PUBLIC
+target_link_libraries(cl-tests PUBLIC
 	EventLoop
 
 	Common
@@ -26,4 +26,4 @@ target_link_libraries(tests PUBLIC
 
 include(CTest)
 include(Catch)
-catch_discover_tests(tests)
+catch_discover_tests(cl-tests)
