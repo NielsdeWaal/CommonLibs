@@ -106,7 +106,7 @@ TEST_CASE("Dma file creation", "[EventLoop File]")
 	{
 		explicit Handler(EventLoop::EventLoop& ev)
 			: mEv(ev)
-			, mFile(mEv, "/tmp/eventloop_file")
+			, mFile(mEv, "/tmp/eventloop_file", O_CREAT)
 		{
 			mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
 		}
@@ -162,7 +162,7 @@ TEST_CASE("Dma file read/write", "[EventLoop File]")
 		{
 			// mFile.Create("/tmp/eventloop_file");
 			// int a = co_await mFile.OpenAt("/tmp/eventloop_file");
-			co_await mFile.OpenAt("/tmp/eventloop_file");
+			co_await mFile.OpenAt("/tmp/eventloop_file", O_CREAT);
 
 			// EventLoop::DmaBuffer testBuf = mEv.AllocateDmaBuffer(4096);
 			EventLoop::DmaBuffer testBuf{4096};
@@ -248,3 +248,54 @@ TEST_CASE("Dma append-only file", "[EventLoop File]")
 
 	unlink("/tmp/eventloop_file");
 }
+
+// TEST_CASE("Standard file reopen", "[EventLoop File]")
+// {
+// 	struct Handler
+// 	{
+// 		explicit Handler(EventLoop::EventLoop& ev)
+// 			: mEv(ev)
+// 			, mFile(mEv)
+// 		{
+// 			func();
+// 		}
+
+// 		EventLoop::uio::task<> func()
+// 		{
+// 			// mFile.Create("/tmp/eventloop_file");
+// 			// int a = co_await mFile.OpenAt("/tmp/eventloop_file");
+// 			co_await mFile.OpenAt("/tmp/eventloop_file", O_CREAT);
+
+// 			// EventLoop::DmaBuffer testBuf = mEv.AllocateDmaBuffer(4096);
+// 			EventLoop::DmaBuffer testBuf{4096};
+// 			int ret = co_await mFile.WriteAt(testBuf.GetPtr(), testBuf.GetSize(), 0);
+// 			REQUIRE(ret == 4096);
+
+// 			// EventLoop::DmaBuffer verificationBuf = mEv.AllocateDmaBuffer(4096);
+// 			// ret = co_await mFile.ReadAt(verificationBuf, 0);
+// 			// REQUIRE(ret == 4096);
+// 			EventLoop::DmaBuffer verBuf = co_await mFile.ReadAt(0, 4096);
+// 			REQUIRE(verBuf.GetSize() == 4096);
+
+// 			// co_await mFile.Close();
+
+// 			verBuf.Free();
+
+// 			mEv.Stop();
+// 		}
+
+// 	private:
+// 		EventLoop::EventLoop& mEv;
+// 		StandardFile mFile;
+// 	};
+
+// 	EventLoop::EventLoop loop;
+// 	loop.LoadConfig("Example.toml");
+// 	loop.Configure();
+
+// 	Handler test(loop);
+
+// 	loop.Run();
+
+// 	unlink("/tmp/eventloop_file");
+// }

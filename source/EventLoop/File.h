@@ -238,16 +238,112 @@ private:
 	OutstandingReq mReq;
 };
 
+// class StandardFile {
+// public:
+// 	StandardFile(EventLoop::EventLoop& ev)
+// 		: mEv(ev)
+// 	{}
+// 	// StandardFile(EventLoop::EventLoop& ev, const std::string& filename)
+// 	// 	: mEv(ev)
+// 	// {
+// 	// 	OpenAt(filename);
+// 	// }
+
+// 	~StandardFile()
+// 	{
+// 		if(mFd)
+// 		{
+// 			mEv.SubmitClose(mFd);
+// 		}
+// 	}
+
+// 	// EventLoop::uio::task<> CreateFile(const std::string filename, std::int32_t flags)
+// 	// {
+// 	// 	int ret = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR | flags, S_IRUSR | S_IWUSR);
+// 	// 	mFd = ret;
+// 	// }
+	
+// 	EventLoop::uio::task<> OpenAt(const std::string filename, std::int32_t flags)
+// 	{
+// 		// mFd = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR, S_IRUSR);
+// 		// int ret = co_await mEv.SubmitOpenAt("/tmp/eventloop_coroutine_file", O_CREAT | O_RDWR, S_IRUSR);
+// 		int ret = co_await mEv.SubmitOpenAt(filename.c_str(),  O_RDWR | flags, S_IRUSR | S_IWUSR);
+// 		// int ret = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR, S_IRUSR);
+// 		mFd = ret;
+
+// 		// TODO retrieve io size for alignment for the device
+// 		// Can be retrieved using the minor and major dev identifiers
+// 		// in /sys/dev/{blockmajor_dev}:{mminor_dev}/queue/{logical_block_size,minimum_io_size}.
+// 		// Minor does have to be 0 here as the minor value indicates the partition and we
+// 		// need to look at the block device itself
+// 		ret = co_await mEv.SubmitStatx(mFd, &mSt);
+// 		// std::cout << "Major " << mSt.stx_dev_major << " Minor " << mSt.stx_dev_minor << std::endl;
+// 		// co_return mFd;
+// 		// return mFd;
+// 		// co_return 0;
+// 		co_return;
+// 	}
+
+// 	EventLoop::SqeAwaitable WriteAt(void* buf, std::size_t len, std::size_t pos)
+// 	{
+// 		return mEv.SubmitWrite(mFd, buf, len, pos);
+// 	}
+
+// 	// EventLoop::SqeAwaitable ReadAt(EventLoop::DmaBuffer& buf, std::size_t pos)
+// 	// {
+// 	// 	return mEv.SubmitRead(mFd, pos, buf.GetPtr(), buf.GetSize());
+// 	// }
+
+// 	EventLoop::uio::task<void*> ReadAt(std::uint64_t pos, std::size_t len)
+// 	{
+// 		// assert(len <= 4096);
+// 		// auto buf = mEv.AllocateDmaBuffer(4096);
+// 		void* buf = malloc(len);
+// 		int ret = co_await mEv.SubmitRead(mFd, pos, buf, len);
+// 		assert(ret >= 0);
+// 		// buf.TrimSize(ret);
+// 		co_return buf;
+// 		// co_return buf;
+// 	}
+
+// 	EventLoop::uio::task<> ReadMany(std::vector<iovec> iovecs)
+// 	{
+// 		co_return;
+// 	}
+
+// 	EventLoop::SqeAwaitable Close()
+// 	{
+// 		auto res = mEv.SubmitClose(mFd);
+// 		mFd = 0;
+// 		return res;
+// 	}
+
+// 	[[nodiscard]] bool IsOpen() const
+// 	{
+// 		return mFd != 0;
+// 	}
+
+// 	[[nodiscard]] std::size_t GetFileSize() const {
+// 		return mSt.stx_size;
+// 	}
+
+// private:
+// 	EventLoop::EventLoop& mEv;
+// 	int mFd{0};
+// 	std::size_t mODirectAlignment{512};
+// 	struct statx mSt{};
+// };
+
 class DmaFile
 {
 public:
 	DmaFile(EventLoop::EventLoop& ev)
 		: mEv(ev)
 	{}
-	DmaFile(EventLoop::EventLoop& ev, const std::string& filename)
+	DmaFile(EventLoop::EventLoop& ev, const std::string& filename, std::int32_t flags = 0)
 		: mEv(ev)
 	{
-		OpenAt(filename);
+		OpenAt(filename, flags);
 	}
 
 	~DmaFile()
@@ -258,11 +354,11 @@ public:
 		}
 	}
 
-	EventLoop::uio::task<> OpenAt(const std::string filename)
+	EventLoop::uio::task<> OpenAt(const std::string filename, const std::int32_t flags = 0)
 	{
 		// mFd = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR, S_IRUSR);
 		// int ret = co_await mEv.SubmitOpenAt("/tmp/eventloop_coroutine_file", O_CREAT | O_RDWR, S_IRUSR);
-		int ret = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR | O_DIRECT, S_IRUSR | S_IWUSR);
+		int ret = co_await mEv.SubmitOpenAt(filename.c_str(), O_RDWR | O_DIRECT | flags, S_IRUSR | S_IWUSR);
 		// int ret = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR, S_IRUSR);
 		mFd = ret;
 

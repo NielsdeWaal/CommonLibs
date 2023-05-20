@@ -244,8 +244,8 @@ private:
 struct SqeAwaitable
 {
 	// TODO: use cancel_token to implement cancellation
-	explicit SqeAwaitable(io_uring_sqe* sqe) noexcept
-		: awaitable(sqe)
+	explicit SqeAwaitable(io_uring_sqe* awaitable) noexcept
+		: awaitable(awaitable)
 	{}
 
 	// User MUST keep resolver alive before the operation is finished
@@ -274,12 +274,9 @@ struct SqeAwaitable
 			resume_resolver resolver{};
 			io_uring_sqe* awaitableSqe;
 
-			await_sqe(io_uring_sqe* newSqe)
-				: awaitableSqe(newSqe)
-			{
-				// UserData* data = new UserData{.mHandleType = HandleType::Coroutine, .mResolver = &resolver};
-				// io_uring_sqe_set_data(sqe, data);
-			}
+			await_sqe(io_uring_sqe* awaitable)
+				: awaitableSqe(awaitable)
+			{}
 
 			constexpr bool await_ready() const noexcept
 			{
