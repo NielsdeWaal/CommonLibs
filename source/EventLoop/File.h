@@ -340,10 +340,10 @@ public:
 	DmaFile(EventLoop::EventLoop& ev)
 		: mEv(ev)
 	{}
-	DmaFile(EventLoop::EventLoop& ev, const std::string& filename, std::int32_t flags = 0)
+	DmaFile(EventLoop::EventLoop& ev, const std::string& filename)
 		: mEv(ev)
 	{
-		OpenAt(filename, flags);
+		OpenAt(filename);
 	}
 
 	~DmaFile()
@@ -354,11 +354,11 @@ public:
 		}
 	}
 
-	EventLoop::uio::task<> OpenAt(const std::string filename, const std::int32_t flags = 0)
+	EventLoop::uio::task<> OpenAt(const std::string filename)
 	{
 		// mFd = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR, S_IRUSR);
 		// int ret = co_await mEv.SubmitOpenAt("/tmp/eventloop_coroutine_file", O_CREAT | O_RDWR, S_IRUSR);
-		int ret = co_await mEv.SubmitOpenAt(filename.c_str(), O_RDWR | O_DIRECT | flags, S_IRUSR | S_IWUSR);
+		int ret = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR | O_DIRECT, S_IRUSR | S_IWUSR);
 		// int ret = co_await mEv.SubmitOpenAt(filename.c_str(), O_CREAT | O_RDWR, S_IRUSR);
 		mFd = ret;
 

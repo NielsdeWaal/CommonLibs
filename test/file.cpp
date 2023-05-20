@@ -106,7 +106,7 @@ TEST_CASE("Dma file creation", "[EventLoop File]")
 	{
 		explicit Handler(EventLoop::EventLoop& ev)
 			: mEv(ev)
-			, mFile(mEv, "/tmp/eventloop_file", O_CREAT)
+			, mFile(mEv, "/tmp/eventloop_file")
 		{
 			mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
 		}
@@ -162,7 +162,7 @@ TEST_CASE("Dma file read/write", "[EventLoop File]")
 		{
 			// mFile.Create("/tmp/eventloop_file");
 			// int a = co_await mFile.OpenAt("/tmp/eventloop_file");
-			co_await mFile.OpenAt("/tmp/eventloop_file", O_CREAT);
+			co_await mFile.OpenAt("/tmp/eventloop_file");
 
 			// EventLoop::DmaBuffer testBuf = mEv.AllocateDmaBuffer(4096);
 			EventLoop::DmaBuffer testBuf{4096};
