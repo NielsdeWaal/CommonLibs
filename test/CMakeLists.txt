@@ -9,9 +9,11 @@ set(testSources
   topology.cpp
 	file.cpp
 	coroutine.cpp
+	threading.cpp
   )
 
 find_package(Catch2 REQUIRED)
+find_package(Threads REQUIRED)
 add_executable(cl-tests ${testSources})
 # target_compile_options(tests PRIVATE -fno-omit-frame-pointer -fsanitize=address)
 # target_link_options(tests PRIVATE -fno-omit-frame-pointer -fsanitize=address)
@@ -22,6 +24,7 @@ target_link_libraries(cl-tests PUBLIC
 	spdlog
 	cpptoml
 	Catch2::Catch2
+	Threads::Threads
 	)
 
 include(CTest)

@@ -51,7 +51,7 @@ static std::vector<std::size_t> ParseList(std::string list)
 	return res;
 }
 
-std::string GetFileContent(const fs::path& path)
+static std::string GetFileContent(const fs::path& path)
 {
 	std::ifstream f(path);
 
