@@ -5,7 +5,31 @@
 
 TEST_CASE("Threading test", "[Eventloop Threading]")
 {
-	EventLoop::Executor exec({1, 2});
-	exec.Startup();
+	struct handler
+	{
+		handler(EventLoop::EventLoop& ev)
+			: mEv(ev)
+		{}
+
+		~handler()
+		{
+			spdlog::info("destructing handler");
+		}
+
+		void Configure()
+		{
+			spdlog::info("from handler");
+		}
+
+	private:
+		EventLoop::EventLoop& mEv;
+	};
+
+	EventLoop::Executor exec({4, 6});
+	exec.Startup([](EventLoop::EventLoop& loop) {
+		handler hand(loop);
+		hand.Configure();
+		return hand;
+	});
 	exec.Wait();
 }
