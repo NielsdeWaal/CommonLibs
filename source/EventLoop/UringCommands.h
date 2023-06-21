@@ -244,8 +244,8 @@ private:
 struct SqeAwaitable
 {
 	// TODO: use cancel_token to implement cancellation
-	explicit SqeAwaitable(io_uring_sqe* awaitable) noexcept
-		: awaitable(awaitable)
+	explicit SqeAwaitable(io_uring_sqe* sqe) noexcept
+		: awaitable(sqe)
 	{}
 
 	// User MUST keep resolver alive before the operation is finished
