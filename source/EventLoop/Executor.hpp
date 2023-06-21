@@ -19,10 +19,10 @@ public:
 		: m_threadMap(threads)
 	{
 		m_threads.resize(threads.size());
-		for(std::size_t i = 0; i < m_threads.size(); ++i)
-		{
-			m_loops.emplace_back();
-		}
+		// for(std::size_t i = 0; i < m_threads.size(); ++i)
+		// {
+		// 	m_loops.emplace_back(i);
+		// }
 	}
 
 	template<typename T>
@@ -33,8 +33,11 @@ public:
 			m_threads[i] = std::thread([id = i, configure, this] {
 				std::this_thread::sleep_for(std::chrono::seconds(3));
 				spdlog::info("From id: {}, pinned to core: {}", id, sched_getcpu());
-				auto program = configure(m_loops[id]);
-				std::this_thread::sleep_for(std::chrono::seconds(2));
+				EventLoop loop(id);
+				// auto program = configure(m_loops[id]);
+				auto program = configure(loop);
+				loop.Run();
+				// std::this_thread::sleep_for(std::chrono::seconds(2));
 			});
 
 			cpu_set_t cpuset;
@@ -60,7 +63,6 @@ private:
 	std::vector<CpuLocation> m_topology{GetMachineTopology()};
 	std::vector<std::thread> m_threads;
 	std::vector<int> m_threadMap;
-	std::deque<EventLoop> m_loops;
 };
 
 } // namespace EventLoop

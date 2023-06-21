@@ -1,4 +1,5 @@
 #include <catch2/catch.hpp>
+#include <thread>
 
 #include "EventLoop.h"
 #include "Executor.hpp"
@@ -9,7 +10,16 @@ TEST_CASE("Threading test", "[Eventloop Threading]")
 	{
 		handler(EventLoop::EventLoop& ev)
 			: mEv(ev)
-		{}
+		{
+			// mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
+			using namespace Common::literals;
+			evTimer = EventLoop::EventLoop::Timer(2_s, EventLoop::EventLoop::TimerType::Oneshot, [&]() {
+				spdlog::info("thread {} timer finished", mEv.GetThreadId());
+				REQUIRE(true);
+				mEv.Stop();
+			});
+			mEv.AddTimer(&evTimer);
+		}
 
 		~handler()
 		{
@@ -18,11 +28,12 @@ TEST_CASE("Threading test", "[Eventloop Threading]")
 
 		void Configure()
 		{
-			spdlog::info("from handler");
+			spdlog::info("Configured handler on thread {}", mEv.GetThreadId());
 		}
 
 	private:
 		EventLoop::EventLoop& mEv;
+		EventLoop::EventLoop::Timer evTimer;
 	};
 
 	EventLoop::Executor exec({4, 6});

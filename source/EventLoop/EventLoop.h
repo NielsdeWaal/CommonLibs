@@ -87,6 +87,8 @@ class EventLoop : Common::NonCopyable<EventLoop>
 {
 public:
 	EventLoop();
+	explicit EventLoop(int threadId);
+
 	~EventLoop();
 
 	int Run();
@@ -199,6 +201,8 @@ public:
 	std::shared_ptr<spdlog::logger> RegisterLogger(const std::string& module) const noexcept;
 	std::shared_ptr<cpptoml::table> GetConfigTable(const std::string& module) const;
 
+	int GetThreadId() const;
+
 	struct ConnInfo
 	{
 	public:
@@ -248,6 +252,8 @@ private:
 	int mSignalFd = 0;
 	sigset_t mSigMask;
 	struct signalfd_siginfo mFDSI;
+
+	int mThreadId;
 
 	// int mTimerIterationCounter = 0;
 

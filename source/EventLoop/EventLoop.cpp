@@ -15,8 +15,42 @@ namespace EventLoop {
 EventLoop::EventLoop()
 	: mStarted(true)
 	, mEpollFd(::epoll_create1(EPOLL_CLOEXEC))
+	, mThreadId(0)
 {
-	mLogger = RegisterLogger("EventLoop");
+	mLogger = RegisterLogger(fmt::format("EventLoop [{}]", mThreadId));
+
+	if(mEpollFd < 0)
+	{
+		mLogger->critical("Failed to setup epoll interface");
+		throw std::runtime_error("Failed to seetup epoll interface");
+	}
+
+	// int ret = io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, IORING_SETUP_IOPOLL);
+	// int uringFlags = IORING_SETUP_IOPOLL;
+	// int ret = io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, uringFlags);
+	int ret = io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, 0);
+	if(ret < 0)
+	{
+		mLogger->critical("Failed to setup io_uring, ret: {}", ret);
+		throw std::runtime_error("Failed to setup io_uring");
+	}
+
+	// io_uring_params uringParams{};
+	// uringParams.flags |= IORING_SETUP_IOPOLL;
+	// io_uring_setup(MaxIORingQueueEntries, &uringParams);
+
+	SetupSignalWatcher();
+
+	mFdHandlers.reserve(FdHandlerReserve);
+	std::fill(mFdHandlers.begin(), mFdHandlers.end(), nullptr);
+}
+
+EventLoop::EventLoop(int threadId)
+	: mStarted(true)
+	, mEpollFd(::epoll_create1(EPOLL_CLOEXEC))
+	, mThreadId(threadId)
+{
+	mLogger = RegisterLogger(fmt::format("EventLoop [{}]", threadId));
 
 	if(mEpollFd < 0)
 	{
@@ -624,6 +658,10 @@ std::shared_ptr<cpptoml::table> EventLoop::GetConfigTable(const std::string& mod
 	}
 
 	return table;
+}
+
+int EventLoop::GetThreadId() const {
+	return mThreadId;
 }
 
 } // namespace EventLoop
