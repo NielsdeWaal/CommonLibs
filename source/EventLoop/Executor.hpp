@@ -19,10 +19,6 @@ public:
 		: m_threadMap(threads)
 	{
 		m_threads.resize(threads.size());
-		// for(std::size_t i = 0; i < m_threads.size(); ++i)
-		// {
-		// 	m_loops.emplace_back(i);
-		// }
 	}
 
 	template<typename T>
@@ -30,32 +26,30 @@ public:
 	{
 		for(std::size_t i = 0; i < m_threads.size(); ++i)
 		{
-			m_threads[i] = std::thread([id = i, configure, this] {
+			m_threads[i] = std::thread([threadId = i, configure, this] {
 				std::this_thread::sleep_for(std::chrono::seconds(3));
-				spdlog::info("From id: {}, pinned to core: {}", id, sched_getcpu());
-				EventLoop loop(id);
-				// auto program = configure(m_loops[id]);
+				spdlog::info("From id: {}, pinned to core: {}", threadId, sched_getcpu());
+				EventLoop loop(threadId);
 				auto program = configure(loop);
 				loop.Run();
-				// std::this_thread::sleep_for(std::chrono::seconds(2));
 			});
 
 			cpu_set_t cpuset;
 			CPU_ZERO(&cpuset);
 			CPU_SET(m_threadMap[i], &cpuset);
-			int rc = pthread_setaffinity_np(m_threads[i].native_handle(), sizeof(cpu_set_t), &cpuset);
-			if(rc != 0)
+			int code = pthread_setaffinity_np(m_threads[i].native_handle(), sizeof(cpu_set_t), &cpuset);
+			if(code != 0)
 			{
-				spdlog::error("Failed to call pthread_setaffinity_np, rc: {}", rc);
+				spdlog::error("Failed to call pthread_setaffinity_np, rc: {}", code);
 			}
 		}
 	}
 
 	void Wait()
 	{
-		for(auto& t: m_threads)
+		for(auto& thread: m_threads)
 		{
-			t.join();
+			thread.join();
 		}
 	}
 

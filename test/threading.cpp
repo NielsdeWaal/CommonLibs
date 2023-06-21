@@ -3,37 +3,35 @@
 
 #include "EventLoop.h"
 #include "Executor.hpp"
+#include "TSC.h"
 
 TEST_CASE("Threading test", "[Eventloop Threading]")
 {
 	struct handler
 	{
-		handler(EventLoop::EventLoop& ev)
+		explicit handler(EventLoop::EventLoop& ev)
 			: mEv(ev)
 		{
 			// mEv.RegisterCallbackHandler(this, EventLoop::EventLoop::LatencyType::Low);
 			using namespace Common::literals;
-			evTimer = EventLoop::EventLoop::Timer(2_s, EventLoop::EventLoop::TimerType::Oneshot, [&]() {
+			evTimer = EventLoop::EventLoop::Timer(Common::MONOTONIC_CLOCK::ToCycles(mEv.GetThreadId()), EventLoop::EventLoop::TimerType::Oneshot, [&]() {
 				spdlog::info("thread {} timer finished", mEv.GetThreadId());
-				REQUIRE(true);
+				REQUIRE(mConfigured);
 				mEv.Stop();
 			});
 			mEv.AddTimer(&evTimer);
 		}
 
-		~handler()
-		{
-			spdlog::info("destructing handler");
-		}
-
 		void Configure()
 		{
 			spdlog::info("Configured handler on thread {}", mEv.GetThreadId());
+			mConfigured = true;
 		}
 
 	private:
 		EventLoop::EventLoop& mEv;
 		EventLoop::EventLoop::Timer evTimer;
+		bool mConfigured{false};
 	};
 
 	EventLoop::Executor exec({4, 6});
@@ -43,4 +41,8 @@ TEST_CASE("Threading test", "[Eventloop Threading]")
 		return hand;
 	});
 	exec.Wait();
+}
+
+TEST_CASE("Message passing", "[Eventloop Threading]") {
+	
 }

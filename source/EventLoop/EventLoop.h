@@ -81,13 +81,12 @@ public:
  * Future expansion:
  * - Different io_uring rings (low latency/standard requests).
  * - Deamonise the application.
- * - Bind application to a single core.
  */
 class EventLoop : Common::NonCopyable<EventLoop>
 {
 public:
 	EventLoop();
-	explicit EventLoop(int threadId);
+	explicit EventLoop(std::size_t threadId);
 
 	~EventLoop();
 
@@ -202,6 +201,7 @@ public:
 	std::shared_ptr<cpptoml::table> GetConfigTable(const std::string& module) const;
 
 	int GetThreadId() const;
+	int GetUringFd() const;
 
 	struct ConnInfo
 	{
@@ -253,7 +253,7 @@ private:
 	sigset_t mSigMask;
 	struct signalfd_siginfo mFDSI;
 
-	int mThreadId;
+	std::size_t mThreadId;
 
 	// int mTimerIterationCounter = 0;
 

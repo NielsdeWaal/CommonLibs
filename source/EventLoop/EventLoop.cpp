@@ -660,8 +660,14 @@ std::shared_ptr<cpptoml::table> EventLoop::GetConfigTable(const std::string& mod
 	return table;
 }
 
-int EventLoop::GetThreadId() const {
+int EventLoop::GetThreadId() const
+{
 	return mThreadId;
+}
+
+int EventLoop::GetUringFd() const
+{
+	return mIoUring.ring_fd;
 }
 
 } // namespace EventLoop
