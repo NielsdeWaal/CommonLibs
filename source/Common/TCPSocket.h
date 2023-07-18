@@ -111,16 +111,15 @@ public:
 private:
 	void SubmitRecv()
 	{
-		// FIXME replace with multi-shot receive
-		mLogger->info("Queueing recv on fd:{}", mFd);
+		// FIXME replace with multi-shot receive - requires kernel 6.0
+		mLogger->trace("Queueing recv on fd:{}", mFd);
 		std::unique_ptr<EventLoop::UserData> usrData = std::make_unique<EventLoop::UserData>();
 
 		usrData->mCallback = this;
 		usrData->mType = EventLoop::SourceType::SockRecv;
-		usrData->mInfo = EventLoop::SOCK_RECV{
-			.fd = mFd, .buf = static_cast<void*>(mData.get()), .len = BUF_SIZE, .flags = 0};
+		usrData->mInfo =
+			EventLoop::SOCK_RECV{.fd = mFd, .buf = static_cast<void*>(mData.get()), .len = BUF_SIZE, .flags = 0};
 
-		// mEv.QueueStandardRequest(std::move(usrData), IORING_RECVSEND_POLL_FIRST);
 		mEv.QueueStandardRequest(std::move(usrData));
 	}
 
@@ -139,10 +138,10 @@ private:
 			break;
 		}
 		case EventLoop::SourceType::SockRecv: {
-			mLogger->info("Received data, len: {}", cqe.res);
+			mLogger->trace("Received data, len: {}", cqe.res);
 			if(cqe.res == 0)
 			{
-				mLogger->info("Socket closed");
+				mLogger->debug("Socket closed");
 				mConnected = false;
 				mHandler->OnDisconnect(this);
 				return;
@@ -160,14 +159,14 @@ private:
 			break;
 		}
 		default: {
-			mLogger->info("fd: {}, res: {}", mFd, cqe.res);
+			mLogger->trace("fd: {}, res: {}", mFd, cqe.res);
 			if(cqe.res > 0)
 			{
 				mLogger->warn("Positive result on unhandled tag");
 			}
 			else if(cqe.res == 0)
 			{
-				mLogger->info("Socket closed");
+				mLogger->warn("Socket closed");
 				mConnected = false;
 				mHandler->OnDisconnect(this);
 			}
@@ -303,7 +302,6 @@ private:
 	ITcpServerSocketHandler* mHandler;
 
 	int mFd{0};
-	struct sockaddr_in remote;
 
 	std::vector<std::unique_ptr<TcpSocket>>
 		mConnections; // TODO This is dumb, user can not access the actual connection
