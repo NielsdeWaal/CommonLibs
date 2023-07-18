@@ -156,18 +156,14 @@ private:
 			break;
 		}
 		case EventLoop::SourceType::SockSend: {
-			// mLogger->error("Completion on send");
+			mLogger->trace("Completion on send");
 			break;
 		}
 		default: {
 			mLogger->info("fd: {}, res: {}", mFd, cqe.res);
 			if(cqe.res > 0)
 			{
-				mLogger->warn("Received data, without SockRecv tag");
-				// const int len = ::recv(mFd, mData.get(), cqe.res, MSG_DONTWAIT);
-				// mHandler->OnIncomingData(this, mData.get(), cqe.res);
-
-				SubmitRecv();
+				mLogger->warn("Positive result on unhandled tag");
 			}
 			else if(cqe.res == 0)
 			{

@@ -218,7 +218,7 @@ private:
 	void SetupSignalWatcher();
 
 	static constexpr int MaxEpollEvents = 64;
-	static constexpr int MaxIORingQueueEntries = 64;
+	static constexpr int MaxIORingQueueEntries = 128;
 	static constexpr int FdHandlerReserve = 512;
 	static constexpr int NonRunHotEpollTimeout = 10;
 
