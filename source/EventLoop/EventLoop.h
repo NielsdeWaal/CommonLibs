@@ -217,8 +217,8 @@ private:
 
 	void SetupSignalWatcher();
 
+	static constexpr int MaxIORingQueueEntries = 64;
 	static constexpr int MaxEpollEvents = 64;
-	static constexpr int MaxIORingQueueEntries = 128;
 	static constexpr int FdHandlerReserve = 512;
 	static constexpr int NonRunHotEpollTimeout = 10;
 
@@ -251,7 +251,16 @@ private:
 
 	// int mTimerIterationCounter = 0;
 
+	struct BufferConfig {
+		std::size_t bufSize;
+		std::size_t bufCount;
+	};
 	io_uring mIoUring;
+	// std::vector<std::pair<std::size_t, std::size_t>> mBufferConfig = {{128 * 1024 * 1024, 4}, {4096, 64}};
+	// std::vector<BufferConfig> mBufferConfig = {{128 * 1024 * 1024, 4}, {4096, 64}};
+	// std::vector<BufferConfig> mBufferConfig;
+	// std::vector<io_uring_buf_ring*> mBufferRings;
+	// std::vector<std::unique_ptr<char[]>> mBuffers;
 
 	bool mStopped = false;
 

@@ -1,4 +1,4 @@
-add_compile_options(-std=c++20 -Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wunused -Wpedantic)
+add_compile_options(-std=c++20 -g -Wall -Wextra -Wshadow -fno-omit-frame-pointer -Wnon-virtual-dtor -Wunused -Wpedantic)
 # add_link_options(-fsanitize=address)
 set(testSources
   main.cpp
@@ -13,8 +13,10 @@ set(testSources
 
 find_package(Catch2 REQUIRED)
 add_executable(cl-tests ${testSources})
-# target_compile_options(tests PRIVATE -fno-omit-frame-pointer -fsanitize=address)
-# target_link_options(tests PRIVATE -fno-omit-frame-pointer -fsanitize=address)
+# target_compile_options(cl-tests PRIVATE -fno-omit-frame-pointer -fsanitize=address)
+# target_link_options(cl-tests PRIVATE -fno-omit-frame-pointer -fsanitize=address)
+# target_compile_options(cl-tests PRIVATE -fno-omit-frame-pointer -fsanitize=cfi -fvisibility=hidden -flto)
+# target_link_options(cl-tests PRIVATE -fno-omit-frame-pointer -fsanitize=cfi -fvisibility=hidden -flto)
 target_link_libraries(cl-tests PUBLIC
 	EventLoop
 

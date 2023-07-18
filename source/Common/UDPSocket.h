@@ -9,8 +9,6 @@
 
 namespace Common {
 
-using namespace EventLoop;
-
 /**
  * Afer socket has been created, we can send data.
  * Do we need to specify dest addr beforehand as a shortcut?

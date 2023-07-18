@@ -12,8 +12,6 @@
 
 namespace Common {
 
-using namespace EventLoop;
-
 namespace Websocket {
 
 struct WebsocketDecoder

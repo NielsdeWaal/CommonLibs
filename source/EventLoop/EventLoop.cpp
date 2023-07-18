@@ -4,6 +4,7 @@
 #include "TSC.h"
 #include "UringCommands.h"
 #include "Util.h"
+#include <cstdlib>
 #include <fcntl.h>
 #include <liburing.h>
 #include <liburing/io_uring.h>
@@ -28,6 +29,7 @@ EventLoop::EventLoop()
 	// int uringFlags = IORING_SETUP_IOPOLL;
 	// int ret = io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, uringFlags);
 	int ret = io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, 0);
+	// int ret = io_uring_queue_init(MaxIORingQueueEntries, &mIoUring, IORING_SETUP_SQPOLL);
 	if(ret < 0)
 	{
 		mLogger->critical("Failed to setup io_uring, ret: {}", ret);
@@ -73,6 +75,43 @@ void EventLoop::Configure()
 	{
 		mEpollTimeout = 0;
 	}
+
+	// mBufferRings.resize(mBufferConfig.size());
+	// for(std::size_t i = 0; i < mBufferConfig.size(); ++i)
+	// {
+	// 	io_uring_buf_ring* br;
+	// 	mBufferRings.push_back(br);
+	// 	if(int ret = posix_memalign((void**)&br, 4096, mBufferConfig.at(i).bufCount * sizeof(io_uring_buf_ring));
+	// 		ret != 0)
+	// 	{
+	// 		mLogger->critical("Failed to allocate memory for buffer ring");
+	// 		exit(1);
+	// 	}
+
+	// 	io_uring_buf_reg reg = {};
+	// 	reg.ring_addr = (unsigned long)br;
+	// 	reg.ring_entries = mBufferConfig.at(i).bufCount;
+	// 	reg.bgid = i + 1; // NOTE plus one so cannot get confused when reading the ID
+	// 	if(int ret = io_uring_register_buf_ring(&mIoUring, &reg, 0); ret != 0)
+	// 	{
+	// 		mLogger->critical("Failed to register buffer ring");
+	// 		exit(1);
+	// 	}
+
+	// 	io_uring_buf_ring_init(br);
+	// 	for(std::size_t j = 0; j < mBufferConfig.at(i).bufCount; ++j)
+	// 	{
+	// 		mBuffers.emplace_back(std::make_unique<char[]>(mBufferConfig.at(i).bufSize));
+	// 		io_uring_buf_ring_add(br,
+	// 			mBuffers.back().get(),
+	// 			mBufferConfig.at(i).bufSize,
+	// 			j,
+	// 			io_uring_buf_ring_mask(mBufferConfig.at(i).bufCount),
+	// 			j);
+	// 	}
+
+	// 	io_uring_buf_ring_advance(br, mBufferConfig.at(i).bufCount);
+	// }
 }
 
 void EventLoop::Stop()
@@ -194,8 +233,10 @@ int EventLoop::Run()
 					assert(false);
 				}
 
-				if(data && data->mReqType == RequestType::MultiShot) {
-					if(!(cqe->flags & IORING_CQE_F_MORE)) {
+				if(data && data->mReqType == RequestType::MultiShot)
+				{
+					if(!(cqe->flags & IORING_CQE_F_MORE))
+					{
 						mLogger->error("No further completions on fd: {}", cqe->res);
 						data->mCallback->OnMultiShotFailure(*cqe, data.get());
 					}
@@ -203,6 +244,14 @@ int EventLoop::Run()
 			}
 			io_uring_cqe_seen(&mIoUring, cqe);
 		}
+
+		// TODO might have to reenter the ring when we enable SQ polling
+		// if(*(mIoUring.sq.kflags) & IORING_SQ_NEED_WAKEUP)
+		// {
+		// 	mLogger->info("Ring needs wakeup");
+			// 	io_uring_enter(mIoUring.enter_ring_fd, )
+		// }
+
 		// if(peekRet != 0)
 		// {
 		// unsigned completed = 0;
@@ -463,7 +512,8 @@ void EventLoop::QueueStandardRequest(std::unique_ptr<UserData> userData, int fla
 	FillSQE(evt, data->mType, data);
 
 	io_uring_sqe_set_data(evt, data);
-	if (flags != 0) {
+	if(flags != 0)
+	{
 		io_uring_sqe_set_flags(evt, flags);
 	}
 
@@ -529,7 +579,7 @@ void EventLoop::FillSQE(SubmissionQueueEvent* sqe, const SourceType& data, const
 		mLogger->info("Prepping send request");
 		const auto& sendData = std::get<SOCK_SEND>(userData->mInfo);
 		io_uring_prep_send(sqe, sendData.fd, sendData.buf, sendData.len, sendData.flags);
-			break;
+		break;
 	}
 	case SourceType::SockRecv: {
 		mLogger->info("Prepping recv request");

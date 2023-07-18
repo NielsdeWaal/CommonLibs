@@ -215,7 +215,7 @@ TEST_CASE("Uring TCP Read And Write", "[Eventloop TCP]")
 		Common::ITcpSocketHandler* OnIncomingConnection() final
 		{
 			spdlog::info("Server port incoming connection");
-			return this;
+			return static_cast<Common::ITcpSocketHandler*>(this);
 		}
 
 		void OnConnected() final
@@ -248,7 +248,7 @@ TEST_CASE("Uring TCP Read And Write", "[Eventloop TCP]")
 		Client(EventLoop::EventLoop& ev, std::string hostname, std::uint16_t localPort,
 			std::vector<std::vector<char>>& data)
 			: mEv(ev)
-			, mSocket(mEv, this)
+			, mSocket(mEv, static_cast<Common::ITcpSocketHandler*>(this))
 			, mData(data)
 		{
 			mSocket.Connect(hostname.data(), localPort);

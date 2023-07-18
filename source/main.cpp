@@ -11,7 +11,6 @@
 
 #include "Example.h"
 
-using namespace EventLoop;
 using namespace std::chrono_literals;
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char const* argv[])

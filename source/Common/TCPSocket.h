@@ -3,8 +3,11 @@
 
 #include "EventLoop.h"
 #include "UringCommands.h"
+
 #include <arpa/inet.h>
+#include <memory>
 #include <netinet/in.h>
+#include <string>
 #include <unistd.h>
 
 namespace Common {
@@ -14,29 +17,37 @@ class TcpSocket;
 class ITcpSocketHandler
 {
 public:
+	ITcpSocketHandler(const ITcpSocketHandler&) = delete;
+	ITcpSocketHandler(ITcpSocketHandler&&) = delete;
+	ITcpSocketHandler& operator=(const ITcpSocketHandler&) = delete;
+	ITcpSocketHandler& operator=(ITcpSocketHandler&&) = delete;
+
+	ITcpSocketHandler() = default;
+	virtual ~ITcpSocketHandler() = default;
+
 	virtual void OnConnected() = 0;
 	virtual void OnDisconnect([[maybe_unused]] TcpSocket* conn) = 0;
 	virtual void OnIncomingData([[maybe_unused]] TcpSocket* conn, char* data, size_t len) = 0;
-	virtual ~ITcpSocketHandler()
-	{}
 };
 
 class TcpSocket : public EventLoop::IUringCallbackHandler
 {
 public:
-	TcpSocket(EventLoop::EventLoop& ev, ITcpSocketHandler* handler) noexcept
+	TcpSocket(EventLoop::EventLoop& ev, ITcpSocketHandler* handler)
 		: mEv(ev)
 		, mHandler(handler)
+		// , mData(static_cast<char*>(std::aligned_alloc(4096, BUF_SIZE)))
 		, mData(new char[BUF_SIZE])
 	{
 		mLogger = mEv.RegisterLogger("TCPSocket");
 		mFd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 	}
 
-	TcpSocket(EventLoop::EventLoop& ev, int fd, ITcpSocketHandler* handler) noexcept
+	TcpSocket(EventLoop::EventLoop& ev, int fd, ITcpSocketHandler* handler)
 		: mEv(ev)
 		, mHandler(handler)
 		, mFd(fd)
+		// , mData(static_cast<char*>(std::aligned_alloc(4096, BUF_SIZE)))
 		, mData(new char[BUF_SIZE])
 	{
 		mLogger = mEv.RegisterLogger("TCPSocket");
@@ -65,11 +76,12 @@ public:
 
 		std::unique_ptr<EventLoop::UserData> data = std::make_unique<EventLoop::UserData>();
 
-		data->mCallback = this;
+		data->mCallback = static_cast<EventLoop::IUringCallbackHandler*>(this);
 		data->mType = EventLoop::SourceType::Connect;
-		data->mInfo = EventLoop::CONNECT{.fd = mFd, .addr = (struct sockaddr*)&remote, .len = sizeof(struct sockaddr)};
+		data->mInfo = EventLoop::CONNECT{.fd = mFd, .addr = (struct sockaddr*)&remote, .len = sizeof(remote)};
 
 		mEv.QueueStandardRequest(std::move(data));
+		assert(data.get() == nullptr);
 	}
 
 	void Send(char* data, const std::size_t len)
@@ -78,7 +90,7 @@ public:
 		{
 			std::unique_ptr<EventLoop::UserData> usrData = std::make_unique<EventLoop::UserData>();
 
-			usrData->mCallback = this;
+			usrData->mCallback = static_cast<EventLoop::IUringCallbackHandler*>(this);
 			usrData->mType = EventLoop::SourceType::SockSend;
 			usrData->mInfo = EventLoop::SOCK_SEND{.fd = mFd, .buf = static_cast<void*>(data), .len = len, .flags = 0};
 
@@ -115,7 +127,7 @@ private:
 		mLogger->trace("Queueing recv on fd:{}", mFd);
 		std::unique_ptr<EventLoop::UserData> usrData = std::make_unique<EventLoop::UserData>();
 
-		usrData->mCallback = this;
+		usrData->mCallback = static_cast<EventLoop::IUringCallbackHandler*>(this);
 		usrData->mType = EventLoop::SourceType::SockRecv;
 		usrData->mInfo =
 			EventLoop::SOCK_RECV{.fd = mFd, .buf = static_cast<void*>(mData.get()), .len = BUF_SIZE, .flags = 0};
@@ -123,7 +135,7 @@ private:
 		mEv.QueueStandardRequest(std::move(usrData));
 	}
 
-	void OnCompletion(EventLoop::CompletionQueueEvent& cqe, const EventLoop::UserData* data)
+	void OnCompletion(EventLoop::CompletionQueueEvent& cqe, const EventLoop::UserData* data) override
 	{
 		switch(data->mType)
 		{
@@ -179,14 +191,14 @@ private:
 		}
 	}
 
-	static constexpr std::size_t BUF_SIZE = 128 * 1024 * 1024;
+	static constexpr std::size_t BUF_SIZE = 64 * 1024 * 1024; // 128MiB
 
 	EventLoop::EventLoop& mEv;
 	ITcpSocketHandler* mHandler;
 
 	bool mConnected{false};
 	int mFd{0};
-	struct sockaddr_in remote;
+	sockaddr_in remote;
 
 	std::unique_ptr<char[]> mData;
 
@@ -196,9 +208,15 @@ private:
 class ITcpServerSocketHandler
 {
 public:
+	ITcpServerSocketHandler(const ITcpServerSocketHandler&) = delete;
+	ITcpServerSocketHandler(ITcpServerSocketHandler&&) = delete;
+	ITcpServerSocketHandler& operator=(const ITcpServerSocketHandler&) = delete;
+	ITcpServerSocketHandler& operator=(ITcpServerSocketHandler&&) = delete;
+
+	ITcpServerSocketHandler() = default;
+	virtual ~ITcpServerSocketHandler() = default;
+
 	virtual ITcpSocketHandler* OnIncomingConnection() = 0;
-	virtual ~ITcpServerSocketHandler()
-	{}
 };
 
 class TcpSocketServer : public EventLoop::IUringCallbackHandler
@@ -269,11 +287,12 @@ private:
 		mEv.QueueStandardRequest(std::move(usrData));
 	}
 
-	void OnCompletion(EventLoop::CompletionQueueEvent& cqe, const EventLoop::UserData* data)
+	void OnCompletion(EventLoop::CompletionQueueEvent& cqe, const EventLoop::UserData* data) override
 	{
 		switch(data->mType)
 		{
-		case EventLoop::SourceType::MultiShotAccept : [[fallthrough]];
+		case EventLoop::SourceType::MultiShotAccept:
+			[[fallthrough]];
 		case EventLoop::SourceType::Accept: {
 			if(cqe.res < 0)
 			{
@@ -281,10 +300,11 @@ private:
 			}
 			else
 			{
-				auto connHandler = mHandler->OnIncomingConnection();
+				ITcpSocketHandler* connHandler = mHandler->OnIncomingConnection();
 				if(connHandler != nullptr)
 				{
 					mConnections.emplace_back(std::make_unique<TcpSocket>(mEv, cqe.res, connHandler));
+					// mConnections.push_back(new TcpSocket(mEv, cqe.res, connHandler));
 				}
 			}
 			break;
@@ -306,6 +326,7 @@ private:
 
 	std::vector<std::unique_ptr<TcpSocket>>
 		mConnections; // TODO This is dumb, user can not access the actual connection
+	// std::vector<TcpSocket*> mConnections;
 
 	std::shared_ptr<spdlog::logger> mLogger;
 };

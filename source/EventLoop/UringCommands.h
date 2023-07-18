@@ -79,7 +79,8 @@ enum class SourceType : std::uint8_t
 	Connect = 14,
 	Accept = 15,
 	MultiShotAccept = 16,
-	Nop = 17,
+	MultiShotRecv = 17,
+	Nop = 18,
 	Invalid = 0,
 };
 

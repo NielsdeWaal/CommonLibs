@@ -10,8 +10,6 @@
 
 namespace Common {
 
-using namespace EventLoop;
-
 class StreamSocket;
 
 class IStreamSocketHandler
