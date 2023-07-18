@@ -161,11 +161,44 @@ struct WRITE : public UringCommandMarker
 	std::uint64_t pos;
 };
 
-using UringCommand = std::variant<NOP, OPEN, CLOSE, READ, WRITE>;
+struct CONNECT : public UringCommandMarker
+{
+	int fd;
+	sockaddr *addr;
+	socklen_t len;
+};
+
+struct SOCK_SEND : public UringCommandMarker
+{
+	int fd;
+	void* buf;
+	std::size_t len;
+	int flags;
+};
+
+struct SOCK_RECV : public UringCommandMarker
+{
+	int fd;
+	void* buf;
+	std::size_t len;
+	int flags;
+};
+
+struct ACCEPT : public UringCommandMarker
+{
+	int fd;
+	sockaddr* addr;
+	socklen_t* len;
+	int flags;
+};
+
+using UringCommand = std::variant<NOP, OPEN, CLOSE, READ, WRITE, CONNECT, SOCK_SEND, SOCK_RECV, ACCEPT>;
 
 struct resolver
 {
 	virtual void resolve(int result) noexcept = 0;
+	// NOTE breaks the trivally destructable requirement
+	// virtual ~resolver() = default;
 };
 
 struct SqeAwaitable;

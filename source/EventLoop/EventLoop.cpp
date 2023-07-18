@@ -440,7 +440,7 @@ void EventLoop::SheduleForNextCycle(std::function<void()> func) noexcept
 	AddTimer(&mShortTimers.back());
 }
 
-void EventLoop::QueueStandardRequest(std::unique_ptr<UserData> userData)
+void EventLoop::QueueStandardRequest(std::unique_ptr<UserData> userData, int flags)
 {
 	mLogger->info("Queueing standard request");
 	// std::unique_ptr<SubmissionQueueEvent> evt = std::make_unique<SubmissionQueueEvent>(io_uring_get_sqe(&mIoUring));
@@ -456,6 +456,9 @@ void EventLoop::QueueStandardRequest(std::unique_ptr<UserData> userData)
 	FillSQE(evt, data->mType, data);
 
 	io_uring_sqe_set_data(evt, data);
+	if (flags != 0) {
+		io_uring_sqe_set_flags(evt, flags);
+	}
 
 	int ret = io_uring_submit(&mIoUring);
 	if(ret < 0)
@@ -495,6 +498,30 @@ void EventLoop::FillSQE(SubmissionQueueEvent* sqe, const SourceType& data, const
 		mLogger->info("Prepping write request");
 		const auto& openData = std::get<WRITE>(userData->mInfo);
 		io_uring_prep_write(sqe, openData.fd, openData.buf, openData.len, openData.pos);
+		break;
+	}
+	case SourceType::Connect: {
+		mLogger->info("Prepping connect request");
+		const auto& connData = std::get<CONNECT>(userData->mInfo);
+		io_uring_prep_connect(sqe, connData.fd, connData.addr, connData.len);
+		break;
+	}
+	case SourceType::Accept: {
+		mLogger->info("Prepping accept request");
+		const auto& connData = std::get<ACCEPT>(userData->mInfo);
+		io_uring_prep_accept(sqe, connData.fd, connData.addr, connData.len, connData.flags);
+		break;
+	}
+	case SourceType::SockSend: {
+		mLogger->info("Prepping send request");
+		const auto& sendData = std::get<SOCK_SEND>(userData->mInfo);
+		io_uring_prep_send(sqe, sendData.fd, sendData.buf, sendData.len, sendData.flags);
+			break;
+	}
+	case SourceType::SockRecv: {
+		mLogger->info("Prepping recv request");
+		const auto& sendData = std::get<SOCK_RECV>(userData->mInfo);
+		io_uring_prep_recv(sqe, sendData.fd, sendData.buf, sendData.len, sendData.flags);
 		break;
 	}
 	default: {

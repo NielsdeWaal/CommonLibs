@@ -186,7 +186,7 @@ public:
 	 * This function will be expanded in the future where it can be used to differentiate between
 	 * direct IO and normal requests such as Send/Recv.
 	 */
-	void QueueStandardRequest(std::unique_ptr<UserData>);
+	void QueueStandardRequest(std::unique_ptr<UserData>, int flags = 0);
 
 	SqeAwaitable AwaitWork(SubmissionQueueEvent* evt, std::uint8_t iflags);
 
