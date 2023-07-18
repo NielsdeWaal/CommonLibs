@@ -37,6 +37,7 @@ class IUringCallbackHandler
 {
 public:
 	virtual void OnCompletion(CompletionQueueEvent& cqe, const UserData*) = 0;
+	virtual void OnMultiShotFailure(CompletionQueueEvent&, const UserData*) {}
 	virtual ~IUringCallbackHandler() = default;
 	// IUringCallbackHandler(const IUringCallbackHandler&) = delete;
 	// IUringCallbackHandler(const IUringCallbackHandler&&) = delete;
@@ -77,10 +78,15 @@ enum class SourceType : std::uint8_t
 	Timeout = 13,
 	Connect = 14,
 	Accept = 15,
-	Nop = 16,
+	MultiShotAccept = 16,
+	Nop = 17,
 	Invalid = 0,
 };
 
+enum class RequestType : std::uint8_t {
+	Normal = 0,
+	MultiShot,
+};
 // std::string GetUringType(const SourceType& type)
 // {
 // 	switch(type)
@@ -164,7 +170,7 @@ struct WRITE : public UringCommandMarker
 struct CONNECT : public UringCommandMarker
 {
 	int fd;
-	sockaddr *addr;
+	sockaddr* addr;
 	socklen_t len;
 };
 
@@ -216,7 +222,8 @@ struct alignas(64) UserData
 	SourceType mType = SourceType::Invalid;
 	UringCommand mInfo{NOP{}};
 	resolver* mResolver{nullptr};
-	SqeAwaitable* mAwaitable;
+	SqeAwaitable* mAwaitable{nullptr};
+	RequestType mReqType{RequestType::Normal};
 	// RequestData mData;
 };
 
@@ -242,7 +249,6 @@ struct deferred_resolver final
 	: resolver
 	, public Common::NonCopyable<deferred_resolver>
 {
-
 	void resolve(int res) noexcept override
 	{
 		this->result = res;
@@ -295,8 +301,8 @@ struct SqeAwaitable
 	void SetCallback(std::function<void(int result)> callback)
 	{
 		// io_uring_sqe_set_data(sqe, new callback_resolver(std::move(cb)));
-		UserData* data =
-			new UserData{.mHandleType = HandleType::Coroutine, .mResolver = (resolver*)new callback_resolver(std::move(callback))};
+		UserData* data = new UserData{
+			.mHandleType = HandleType::Coroutine, .mResolver = (resolver*)new callback_resolver(std::move(callback))};
 		io_uring_sqe_set_data(awaitable, data);
 	}
 

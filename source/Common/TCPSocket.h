@@ -262,8 +262,9 @@ private:
 		std::unique_ptr<EventLoop::UserData> usrData = std::make_unique<EventLoop::UserData>();
 
 		usrData->mCallback = this;
-		usrData->mType = EventLoop::SourceType::Accept;
+		usrData->mType = EventLoop::SourceType::MultiShotAccept;
 		usrData->mInfo = EventLoop::ACCEPT{.fd = mFd, .addr = &sockRemote, .len = &len, .flags = 0};
+		usrData->mReqType = EventLoop::RequestType::MultiShot;
 
 		mEv.QueueStandardRequest(std::move(usrData));
 	}
@@ -272,6 +273,7 @@ private:
 	{
 		switch(data->mType)
 		{
+		case EventLoop::SourceType::MultiShotAccept : [[fallthrough]];
 		case EventLoop::SourceType::Accept: {
 			if(cqe.res < 0)
 			{
@@ -285,7 +287,6 @@ private:
 					mConnections.emplace_back(std::make_unique<TcpSocket>(mEv, cqe.res, connHandler));
 				}
 			}
-			SubmitAccept();
 			break;
 		}
 		default: {

@@ -193,6 +193,13 @@ int EventLoop::Run()
 					mLogger->critical("received nullptr user_data on completion");
 					assert(false);
 				}
+
+				if(data && data->mReqType == RequestType::MultiShot) {
+					if(!(cqe->flags & IORING_CQE_F_MORE)) {
+						mLogger->error("No further completions on fd: {}", cqe->res);
+						data->mCallback->OnMultiShotFailure(*cqe, data.get());
+					}
+				}
 			}
 			io_uring_cqe_seen(&mIoUring, cqe);
 		}
@@ -510,6 +517,12 @@ void EventLoop::FillSQE(SubmissionQueueEvent* sqe, const SourceType& data, const
 		mLogger->info("Prepping accept request");
 		const auto& connData = std::get<ACCEPT>(userData->mInfo);
 		io_uring_prep_accept(sqe, connData.fd, connData.addr, connData.len, connData.flags);
+		break;
+	}
+	case SourceType::MultiShotAccept: {
+		mLogger->info("Prepping multi accept request");
+		const auto& connData = std::get<ACCEPT>(userData->mInfo);
+		io_uring_prep_multishot_accept(sqe, connData.fd, connData.addr, connData.len, connData.flags);
 		break;
 	}
 	case SourceType::SockSend: {
