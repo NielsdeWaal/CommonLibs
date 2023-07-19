@@ -180,6 +180,8 @@ public:
 	// back by the caller
 	DmaBuffer AllocateDmaBuffer(std::size_t size);
 
+	char* GetBufById(int id);
+
 	/**
 	 * @brief Queue a standard io_uring request to the ring
 	 *
@@ -187,6 +189,7 @@ public:
 	 * direct IO and normal requests such as Send/Recv.
 	 */
 	void QueueStandardRequest(std::unique_ptr<UserData>, int flags = 0);
+	void QueueCancelationFd(int fd, int flags);
 
 	SqeAwaitable AwaitWork(SubmissionQueueEvent* evt, std::uint8_t iflags);
 
@@ -251,16 +254,20 @@ private:
 
 	// int mTimerIterationCounter = 0;
 
-	struct BufferConfig {
+	struct BufferConfig
+	{
 		std::size_t bufSize;
 		std::size_t bufCount;
 	};
 	io_uring mIoUring;
-	// std::vector<std::pair<std::size_t, std::size_t>> mBufferConfig = {{128 * 1024 * 1024, 4}, {4096, 64}};
+	// // std::vector<BufferConfig> mBufferConfig;
 	// std::vector<BufferConfig> mBufferConfig = {{128 * 1024 * 1024, 4}, {4096, 64}};
-	// std::vector<BufferConfig> mBufferConfig;
 	// std::vector<io_uring_buf_ring*> mBufferRings;
-	// std::vector<std::unique_ptr<char[]>> mBuffers;
+	// std::vector<std::vector<std::unique_ptr<char[]>>> mBuffers;
+	struct io_uring_buf_ring* br;
+	char* bufs[64];
+	static constexpr int BUFS_IN_GROUP = 64;
+	static constexpr int BUFSZ = 128;
 
 	bool mStopped = false;
 

@@ -225,6 +225,7 @@ TEST_CASE("Uring TCP Read And Write", "[Eventloop TCP]")
 
 		void OnDisconnect(Common::TcpSocket* conn) final
 		{
+			spdlog::info("Client disconnected from server");
 			REQUIRE(conn->IsConnected() == false);
 			std::raise(SIGINT);
 		}

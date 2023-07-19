@@ -5,6 +5,7 @@
 #include "UringCommands.h"
 
 #include <arpa/inet.h>
+#include <liburing/io_uring.h>
 #include <memory>
 #include <netinet/in.h>
 #include <string>
@@ -109,6 +110,8 @@ public:
 		}
 		if(mFd)
 		{
+			mLogger->info("Closing fd: {}", mFd);
+			mEv.QueueCancelationFd(mFd, IORING_ASYNC_CANCEL_ALL);
 			::close(mFd);
 			mFd = 0;
 		}
@@ -123,15 +126,19 @@ private:
 	void SubmitRecv()
 	{
 		// FIXME replace with multi-shot receive - requires kernel 6.0
+		// TODO need some 'hint' field to select between large buffers and smaller buffers
 		mLogger->trace("Queueing recv on fd:{}", mFd);
 		std::unique_ptr<EventLoop::UserData> usrData = std::make_unique<EventLoop::UserData>();
 
-		usrData->mCallback = static_cast<EventLoop::IUringCallbackHandler*>(this);
-		usrData->mType = EventLoop::SourceType::SockRecv;
-		usrData->mInfo =
-			EventLoop::SOCK_RECV{.fd = mFd, .buf = static_cast<void*>(mData.get()), .len = BUF_SIZE, .flags = 0};
+		const std::size_t len = mUseMultiShotReceive ? 0 : BUF_SIZE;
+		void* addr = mUseMultiShotReceive ? nullptr : static_cast<void*>(mData.get());
 
-		mEv.QueueStandardRequest(std::move(usrData));
+		usrData->mCallback = static_cast<EventLoop::IUringCallbackHandler*>(this);
+		usrData->mType = mUseMultiShotReceive ? EventLoop::SourceType::MultiShotRecv : EventLoop::SourceType::SockRecv;
+		usrData->mInfo = EventLoop::SOCK_RECV{.fd = mFd, .buf = addr, .len = len, .flags = 0};
+		usrData->mReqType = mUseMultiShotReceive ? EventLoop::RequestType::MultiShot : EventLoop::RequestType::Normal;
+
+		mEv.QueueStandardRequest(std::move(usrData), IOSQE_BUFFER_SELECT);
 	}
 
 	void OnCompletion(EventLoop::CompletionQueueEvent& cqe, const EventLoop::UserData* data) override
@@ -161,7 +168,26 @@ private:
 			{
 				mHandler->OnIncomingData(this, mData.get(), cqe.res);
 
-				SubmitRecv();
+				if(!mUseMultiShotReceive)
+				{
+					SubmitRecv();
+				}
+			}
+			break;
+		}
+		case EventLoop::SourceType::MultiShotRecv: {
+			mLogger->trace("Received data, len: {}", cqe.res);
+			if(cqe.res == 0)
+			{
+				mLogger->debug("Socket closed");
+				mConnected = false;
+				mHandler->OnDisconnect(this);
+				return;
+			}
+			else if(cqe.res > 0)
+			{
+				char* addr = mEv.GetBufById(((int)cqe.flags) >> IORING_CQE_BUFFER_SHIFT);
+				mHandler->OnIncomingData(this, addr, cqe.res);
 			}
 			break;
 		}
@@ -198,6 +224,8 @@ private:
 	bool mConnected{false};
 	int mFd{0};
 	sockaddr_in remote;
+
+	bool mUseMultiShotReceive{true};
 
 	std::unique_ptr<char[]> mData;
 

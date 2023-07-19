@@ -49,6 +49,14 @@ EventLoop::EventLoop()
 EventLoop::~EventLoop()
 {
 	io_uring_queue_exit(&mIoUring);
+	for(int i = 0; i < BUFS_IN_GROUP; ++i)
+	{
+		free(bufs[i]);
+	}
+	free(br);
+	// for(io_uring_buf_ring* ring : mBufferRings) {
+	// 	free(ring);
+	// }
 }
 
 void EventLoop::Configure()
@@ -76,6 +84,38 @@ void EventLoop::Configure()
 		mEpollTimeout = 0;
 	}
 
+	struct io_uring_buf_reg reg = {};
+	short unsigned int i;
+	int ret;
+
+	/* allocate mem for sharing buffer ring */
+	if((ret = posix_memalign((void**)&br, 4096, BUFS_IN_GROUP * sizeof(struct io_uring_buf_ring))) != 0)
+	{
+		mLogger->critical("Couldn't align buffer group {}", ret);
+		exit(1);
+	}
+
+	/* assign and register buffer ring */
+	reg.ring_addr = (unsigned long)br;
+	reg.ring_entries = BUFS_IN_GROUP;
+	reg.bgid = 1;
+	if((ret = io_uring_register_buf_ring(&mIoUring, &reg, 0)) != 0)
+	{
+		mLogger->critical("Error registering buffers {}", -errno);
+		exit(1);
+	}
+
+	/* add initial buffers to the ring */
+	io_uring_buf_ring_init(br);
+	for(i = 0; i < BUFS_IN_GROUP; i++)
+	{
+		bufs[i] = (char*)malloc(BUFSZ);
+		/* add each buffer, we'll use i buffer ID */
+		io_uring_buf_ring_add(br, bufs[i], BUFSZ, i, io_uring_buf_ring_mask(BUFS_IN_GROUP), i);
+	}
+
+	/* we've supplied buffers, make them visible to the kernel */
+	io_uring_buf_ring_advance(br, BUFS_IN_GROUP);
 	// mBufferRings.resize(mBufferConfig.size());
 	// for(std::size_t i = 0; i < mBufferConfig.size(); ++i)
 	// {
@@ -99,11 +139,13 @@ void EventLoop::Configure()
 	// 	}
 
 	// 	io_uring_buf_ring_init(br);
+	// 	mBuffers.emplace_back();
+	// 	mBuffers.back().resize(mBufferConfig.at(i).bufCount);
 	// 	for(std::size_t j = 0; j < mBufferConfig.at(i).bufCount; ++j)
 	// 	{
-	// 		mBuffers.emplace_back(std::make_unique<char[]>(mBufferConfig.at(i).bufSize));
+	// 		mBuffers.back().emplace_back(std::make_unique<char[]>(mBufferConfig.at(i).bufSize));
 	// 		io_uring_buf_ring_add(br,
-	// 			mBuffers.back().get(),
+	// 			mBuffers.back().back().get(),
 	// 			mBufferConfig.at(i).bufSize,
 	// 			j,
 	// 			io_uring_buf_ring_mask(mBufferConfig.at(i).bufCount),
@@ -207,7 +249,11 @@ int EventLoop::Run()
 		if(peekRet == 0)
 		{
 			mLogger->debug("Got uring completion event, res: {}", cqe->res);
-			if(cqe->res < 0)
+			if(cqe->flags & IORING_CQE_F_BUFFER)
+			{
+				mLogger->warn("Using provided buffer");
+			}
+			if(cqe->res < 0 && !(cqe->res == -125))
 			{
 				mLogger->critical("Got error on completion event: {}", cqe->res);
 				assert(false);
@@ -229,17 +275,21 @@ int EventLoop::Run()
 				}
 				else
 				{
-					mLogger->critical("received nullptr user_data on completion");
-					assert(false);
+					mLogger->error("received nullptr user_data on completion");
+					// assert(false);
 				}
 
 				if(data && data->mReqType == RequestType::MultiShot)
 				{
 					if(!(cqe->flags & IORING_CQE_F_MORE))
 					{
-						mLogger->error("No further completions on fd: {}", cqe->res);
-						data->mCallback->OnMultiShotFailure(*cqe, data.get());
+						mLogger->warn("No further completions on fd: {}", cqe->res);
+						if(data) {
+							data->mCallback->OnMultiShotFailure(*cqe, data.get());
+						}
 					}
+					data.release();
+					io_uring_buf_ring_advance(br, 1);
 				}
 			}
 			io_uring_cqe_seen(&mIoUring, cqe);
@@ -249,7 +299,7 @@ int EventLoop::Run()
 		// if(*(mIoUring.sq.kflags) & IORING_SQ_NEED_WAKEUP)
 		// {
 		// 	mLogger->info("Ring needs wakeup");
-			// 	io_uring_enter(mIoUring.enter_ring_fd, )
+		// 	io_uring_enter(mIoUring.enter_ring_fd, )
 		// }
 
 		// if(peekRet != 0)
@@ -496,6 +546,18 @@ void EventLoop::SheduleForNextCycle(std::function<void()> func) noexcept
 	AddTimer(&mShortTimers.back());
 }
 
+void EventLoop::QueueCancelationFd(int fd, int flags)
+{
+	mLogger->info("Cancelling fd: {}", fd);
+	SubmissionQueueEvent* evt = io_uring_get_sqe(&mIoUring);
+	io_uring_prep_cancel_fd(evt, fd, flags);
+	int ret = io_uring_submit(&mIoUring);
+	if(ret < 0)
+	{
+		mLogger->critical("Unable to submit request to io_uring");
+	}
+}
+
 void EventLoop::QueueStandardRequest(std::unique_ptr<UserData> userData, int flags)
 {
 	mLogger->info("Queueing standard request");
@@ -587,11 +649,24 @@ void EventLoop::FillSQE(SubmissionQueueEvent* sqe, const SourceType& data, const
 		io_uring_prep_recv(sqe, sendData.fd, sendData.buf, sendData.len, sendData.flags);
 		break;
 	}
+	case SourceType::MultiShotRecv: {
+		mLogger->info("Prepping mutli recv request");
+		const auto& sendData = std::get<SOCK_RECV>(userData->mInfo);
+		io_uring_prep_recv_multishot(sqe, sendData.fd, NULL, 0, sendData.flags);
+		sqe->buf_group = 1;
+		break;
+	}
 	default: {
 		throw std::runtime_error("Unhandled SourceType");
 		break;
 	}
 	}
+}
+
+char* EventLoop::GetBufById(int id)
+{
+	return bufs[id];
+	// return mBuffers.at(0).at(id).get();
 }
 
 SqeAwaitable EventLoop::SubmitRead(int fd, std::uint64_t pos, void* buf, std::size_t len)
