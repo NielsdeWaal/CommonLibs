@@ -81,7 +81,6 @@ public:
 		data->mInfo = EventLoop::CONNECT{.fd = mFd, .addr = (struct sockaddr*)&remote, .len = sizeof(remote)};
 
 		mEv.QueueStandardRequest(std::move(data));
-		assert(data.get() == nullptr);
 	}
 
 	void Send(char* data, const std::size_t len)
@@ -280,9 +279,9 @@ private:
 		std::unique_ptr<EventLoop::UserData> usrData = std::make_unique<EventLoop::UserData>();
 
 		usrData->mCallback = this;
-		usrData->mType = EventLoop::SourceType::MultiShotAccept;
+		usrData->mType = mUseMultishotAccept ? EventLoop::SourceType::MultiShotAccept : EventLoop::SourceType::Accept;
 		usrData->mInfo = EventLoop::ACCEPT{.fd = mFd, .addr = &sockRemote, .len = &len, .flags = 0};
-		usrData->mReqType = EventLoop::RequestType::MultiShot;
+		usrData->mReqType = mUseMultishotAccept ? EventLoop::RequestType::MultiShot : EventLoop::RequestType::Normal;
 
 		mEv.QueueStandardRequest(std::move(usrData));
 	}
@@ -306,6 +305,11 @@ private:
 					mConnections.emplace_back(std::make_unique<TcpSocket>(mEv, cqe.res, connHandler));
 					// mConnections.push_back(new TcpSocket(mEv, cqe.res, connHandler));
 				}
+
+				if(!mUseMultishotAccept)
+				{
+					SubmitAccept();
+				}
 			}
 			break;
 		}
@@ -323,6 +327,8 @@ private:
 	ITcpServerSocketHandler* mHandler;
 
 	int mFd{0};
+
+	bool mUseMultishotAccept{true};
 
 	std::vector<std::unique_ptr<TcpSocket>>
 		mConnections; // TODO This is dumb, user can not access the actual connection
